@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Sprinkler Controller</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  body { font-family: 'Segoe UI', sans-serif; background: #1a1a2e; color: #eee; min-height: 100vh; padding-bottom: 80px; }
+
+  /* Header */
+  header {
+    background: #16213e;
+    padding: 14px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid #0f3460;
+    position: sticky; top: 0; z-index: 100;
+  }
+  header h1 { font-size: 1.1rem; color: #4fc3f7; letter-spacing: 0.5px; }
+  .system-status { display: flex; align-items: center; gap: 6px; font-size: 0.8rem; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: #4caf50; animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1}50%{opacity:0.4} }
+
+  /* Pages */
+  .page { display: none; padding: 16px; }
+  .page.active { display: block; }
+
+  /* Status Bar */
+  .status-bar {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+  .stat-card {
+    background: #16213e;
+    border: 1px solid #0f3460;
+    border-radius: 12px;
+    padding: 14px;
+    text-align: center;
+  }
+  .stat-card .label { font-size: 0.7rem; color: #90caf9; text-transform: uppercase; margin-bottom: 5px; letter-spacing: 0.5px; }
+  .stat-card .value { font-size: 1.3rem; font-weight: bold; color: #4fc3f7; }
+  .stat-card .sub { font-size: 0.7rem; color: #888; margin-top: 3px; }
+
+  /* Rain Banner */
+  .rain-banner {
+    background: #0d2137;
+    border: 1px solid #1565c0;
+    border-radius: 10px;
+    padding: 10px 14px;
+    margin-bottom: 16px;
+    font-size: 0.82rem;
+    color: #90caf9;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  /* Zone Cards */
+  h2 { font-size: 0.85rem; color: #90caf9; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; }
+
+  .zones { display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; }
+  .zone-card {
+    background: #16213e;
+    border: 1px solid #0f3460;
+    border-radius: 12px;
+    padding: 14px;
+    transition: border-color 0.2s;
+  }
+  .zone-card.active { border-color: #4caf50; background: #162816; }
+  .zone-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  .zone-name { font-weight: 600; font-size: 0.95rem; }
+  .zone-card.active .zone-name { color: #81c784; }
+  .zone-badge {
+    font-size: 0.68rem; padding: 3px 9px; border-radius: 20px;
+    background: #263238; color: #888;
+  }
+  .zone-badge.on { background: #1b5e20; color: #81c784; }
+  .zone-info { font-size: 0.78rem; color: #777; margin-bottom: 10px; }
+  .zone-info span { color: #aaa; }
+  .zone-actions { display: flex; gap: 8px; }
+  .btn {
+    flex: 1; padding: 10px 0; border: none; border-radius: 8px;
+    font-size: 0.82rem; cursor: pointer; font-weight: 600;
+    transition: opacity 0.15s; min-height: 42px;
+  }
+  .btn:active { opacity: 0.7; }
+  .btn-run { background: #1565c0; color: #fff; }
+  .btn-stop { background: #b71c1c; color: #fff; }
+  .btn-skip { background: #37474f; color: #ccc; }
+
+  /* Schedule Cards */
+  .schedule-cards { display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; }
+  .sched-card {
+    background: #16213e;
+    border: 1px solid #0f3460;
+    border-radius: 12px;
+    padding: 14px;
+  }
+  .sched-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  .sched-name { font-weight: 600; font-size: 0.95rem; }
+  .sched-time { font-size: 1.1rem; color: #4fc3f7; font-weight: bold; margin-bottom: 8px; }
+  .tag-row { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; }
+  .tag { font-size: 0.68rem; padding: 3px 7px; border-radius: 4px; }
+  .tag-day { background: #1565c0; color: #90caf9; }
+  .tag-zone { background: #1b5e20; color: #81c784; }
+
+  /* Toggle */
+  .toggle {
+    width: 44px; height: 24px; background: #4caf50; border-radius: 12px;
+    position: relative; cursor: pointer; display: inline-block; flex-shrink: 0;
+  }
+  .toggle.off { background: #37474f; }
+  .toggle::after {
+    content: ''; position: absolute; width: 20px; height: 20px;
+    background: #fff; border-radius: 50%; top: 2px; right: 2px; transition: right 0.2s;
+  }
+  .toggle.off::after { right: 22px; }
+
+  .btn-add-sched {
+    width: 100%; padding: 12px; background: #0f3460; border: 1px dashed #1a3a6e;
+    color: #4fc3f7; border-radius: 12px; font-size: 0.9rem; cursor: pointer;
+    min-height: 48px;
+  }
+
+  /* Manual Run */
+  .manual-card {
+    background: #16213e;
+    border: 1px solid #0f3460;
+    border-radius: 12px;
+    padding: 16px;
+  }
+  .form-group { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+  .form-group label { font-size: 0.75rem; color: #90caf9; text-transform: uppercase; letter-spacing: 0.5px; }
+  select, input[type="number"] {
+    background: #0f3460; border: 1px solid #1a3a6e; color: #eee;
+    padding: 12px 14px; border-radius: 8px; font-size: 0.95rem;
+    width: 100%; min-height: 48px;
+  }
+  .btn-full {
+    width: 100%; padding: 14px; border: none; border-radius: 10px;
+    font-size: 1rem; font-weight: 700; cursor: pointer; min-height: 52px;
+    margin-bottom: 10px;
+  }
+  .btn-full:active { opacity: 0.8; }
+  .btn-start { background: #2e7d32; color: #fff; }
+  .btn-stop-all { background: #b71c1c; color: #fff; }
+
+  /* Bottom Nav */
+  .bottom-nav {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    background: #16213e;
+    border-top: 1px solid #0f3460;
+    display: flex;
+    z-index: 200;
+  }
+  .nav-item {
+    flex: 1; padding: 10px 4px 12px; text-align: center; cursor: pointer;
+    border: none; background: none; color: #888; transition: color 0.2s;
+  }
+  .nav-item.active { color: #4fc3f7; }
+  .nav-item:active { color: #90caf9; }
+  .nav-icon { font-size: 1.3rem; display: block; margin-bottom: 2px; }
+  .nav-label { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.5px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>💧 Sprinkler</h1>
+  <div class="system-status">
+    <div class="dot"></div>
+    <span>Online</span>
+  </div>
+</header>
+
+<!-- Dashboard Page -->
+<div class="page active" id="page-dashboard">
+  <div class="status-bar">
+    <div class="stat-card">
+      <div class="label">Active Zone</div>
+      <div class="value" style="color:#81c784">Zone 2</div>
+      <div class="sub">8 min left</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">Next Run</div>
+      <div class="value">6:00 AM</div>
+      <div class="sub">Tomorrow</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">Last Run</div>
+      <div class="value">Today</div>
+      <div class="sub">5:58 AM · 42 min</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">Rain Sensor</div>
+      <div class="value" style="color:#f06292">Active</div>
+      <div class="sub">Skipping runs</div>
+    </div>
+  </div>
+
+  <div class="rain-banner">🌧️ <strong>Rain sensor active</strong> — runs paused until clear.</div>
+
+  <h2>Zones</h2>
+  <div class="zones">
+
+    <div class="zone-card">
+      <div class="zone-header">
+        <span class="zone-name">Zone 1 — Front Lawn</span>
+        <span class="zone-badge">OFF</span>
+      </div>
+      <div class="zone-info">15 min · Last: <span>Today 5:58 AM</span></div>
+      <div class="zone-actions">
+        <button class="btn btn-run">▶ Run</button>
+        <button class="btn btn-skip">Skip</button>
+      </div>
+    </div>
+
+    <div class="zone-card active">
+      <div class="zone-header">
+        <span class="zone-name">Zone 2 — Back Lawn</span>
+        <span class="zone-badge on">● RUNNING</span>
+      </div>
+      <div class="zone-info">20 min · Remaining: <span>8 min</span></div>
+      <div class="zone-actions">
+        <button class="btn btn-stop">■ Stop</button>
+        <button class="btn btn-skip">+5 min</button>
+      </div>
+    </div>
+
+    <div class="zone-card">
+      <div class="zone-header">
+        <span class="zone-name">Zone 3 — Side Garden</span>
+        <span class="zone-badge">OFF</span>
+      </div>
+      <div class="zone-info">10 min · Last: <span>Today 6:20 AM</span></div>
+      <div class="zone-actions">
+        <button class="btn btn-run">▶ Run</button>
+        <button class="btn btn-skip">Skip</button>
+      </div>
+    </div>
+
+    <div class="zone-card">
+      <div class="zone-header">
+        <span class="zone-name">Zone 4 — Flower Beds</span>
+        <span class="zone-badge">OFF</span>
+      </div>
+      <div class="zone-info">12 min · Last: <span>Today 6:33 AM</span></div>
+      <div class="zone-actions">
+        <button class="btn btn-run">▶ Run</button>
+        <button class="btn btn-skip">Skip</button>
+      </div>
+    </div>
+
+    <div class="zone-card">
+      <div class="zone-header">
+        <span class="zone-name">Zone 5 — Driveway Strip</span>
+        <span class="zone-badge">OFF</span>
+      </div>
+      <div class="zone-info">8 min · Last: <span>Today 6:45 AM</span></div>
+      <div class="zone-actions">
+        <button class="btn btn-run">▶ Run</button>
+        <button class="btn btn-skip">Skip</button>
+      </div>
+    </div>
+
+    <div class="zone-card">
+      <div class="zone-header">
+        <span class="zone-name">Zone 6 — Back Garden</span>
+        <span class="zone-badge">OFF</span>
+      </div>
+      <div class="zone-info">15 min · Last: <span>Today 6:53 AM</span></div>
+      <div class="zone-actions">
+        <button class="btn btn-run">▶ Run</button>
+        <button class="btn btn-skip">Skip</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Schedule Page -->
+<div class="page" id="page-schedule">
+  <h2>Schedules</h2>
+  <div class="schedule-cards">
+
+    <div class="sched-card">
+      <div class="sched-header">
+        <span class="sched-name">Morning Run</span>
+        <div class="toggle"></div>
+      </div>
+      <div class="sched-time">6:00 AM</div>
+      <div class="tag-row">
+        <span class="tag tag-day">Mon</span>
+        <span class="tag tag-day">Wed</span>
+        <span class="tag tag-day">Fri</span>
+      </div>
+      <div class="tag-row">
+        <span class="tag tag-zone">Z1</span>
+        <span class="tag tag-zone">Z2</span>
+        <span class="tag tag-zone">Z3</span>
+        <span class="tag tag-zone">Z4</span>
+        <span class="tag tag-zone">Z5</span>
+        <span class="tag tag-zone">Z6</span>
+      </div>
+    </div>
+
+    <div class="sched-card">
+      <div class="sched-header">
+        <span class="sched-name">Weekend Deep Water</span>
+        <div class="toggle"></div>
+      </div>
+      <div class="sched-time">5:30 AM</div>
+      <div class="tag-row">
+        <span class="tag tag-day">Sat</span>
+        <span class="tag tag-day">Sun</span>
+      </div>
+      <div class="tag-row">
+        <span class="tag tag-zone">Z1</span>
+        <span class="tag tag-zone">Z2</span>
+      </div>
+    </div>
+
+    <div class="sched-card">
+      <div class="sched-header">
+        <span class="sched-name">Garden Only</span>
+        <div class="toggle off"></div>
+      </div>
+      <div class="sched-time" style="color:#888">7:00 PM</div>
+      <div class="tag-row">
+        <span class="tag tag-day">Tue</span>
+        <span class="tag tag-day">Thu</span>
+      </div>
+      <div class="tag-row">
+        <span class="tag tag-zone">Z3</span>
+        <span class="tag tag-zone">Z4</span>
+      </div>
+    </div>
+
+    <button class="btn-add-sched">+ Add Schedule</button>
+  </div>
+</div>
+
+<!-- Manual Run Page -->
+<div class="page" id="page-manual">
+  <h2>Manual Run</h2>
+  <div class="manual-card">
+    <div class="form-group">
+      <label>Select Zone</label>
+      <select>
+        <option>Zone 1 — Front Lawn</option>
+        <option>Zone 2 — Back Lawn</option>
+        <option>Zone 3 — Side Garden</option>
+        <option>Zone 4 — Flower Beds</option>
+        <option>Zone 5 — Driveway Strip</option>
+        <option>Zone 6 — Back Garden</option>
+        <option>All Zones (Sequential)</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Duration (minutes)</label>
+      <input type="number" value="10" min="1" max="60">
+    </div>
+    <button class="btn-full btn-start">▶ Start Zone</button>
+    <button class="btn-full btn-stop-all">■ Stop All Zones</button>
+  </div>
+</div>
+
+<!-- Bottom Navigation -->
+<nav class="bottom-nav">
+  <button class="nav-item active" onclick="showPage('dashboard', this)">
+    <span class="nav-icon">🏠</span>
+    <span class="nav-label">Dashboard</span>
+  </button>
+  <button class="nav-item" onclick="showPage('schedule', this)">
+    <span class="nav-icon">📅</span>
+    <span class="nav-label">Schedule</span>
+  </button>
+  <button class="nav-item" onclick="showPage('manual', this)">
+    <span class="nav-icon">▶️</span>
+    <span class="nav-label">Manual</span>
+  </button>
+  <button class="nav-item" onclick="showPage('settings', this)">
+    <span class="nav-icon">⚙️</span>
+    <span class="nav-label">Settings</span>
+  </button>
+</nav>
+
+<script>
+function showPage(name, navEl) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  const page = document.getElementById('page-' + name);
+  if (page) page.classList.add('active');
+  if (navEl) navEl.classList.add('active');
+}
+</script>
+
+</body>
+</html>

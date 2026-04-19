@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Network Configuration - Sprinkler Controller</title>
+    
+    <style>
+        :root {
+            --primary-blue: #1877f2;
+            --active-green: #28a745;
+            --stop-red: #dc3545;
+            --warning-orange: #fd7e14;
+            --disabled-grey: #9E9E9E;
+            --inactive-grey: #6c757d;
+            --text-dark: #1c1e21;
+            --text-light: #606770;
+            --background-light: #f0f2f5;
+            --card-background: #fff;
+            --border-color: #dddfe2;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--background-light);
+            color: var(--text-dark);
+            margin: 0;
+            padding: 15px;
+            display: flex;
+            justify-content: center;
+        }
+        
+        .container {
+            width: 100%;
+            max-width: 800px;
+            background-color: var(--card-background);
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            padding: 20px;
+        }
+        
+        h1 {
+            text-align: center;
+            color: var(--primary-blue);
+            margin-bottom: 10px;
+        }
+        
+        .nav-links {
+            text-align: center;
+            margin-bottom: 30px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        .nav-links a {
+            color: var(--primary-blue);
+            text-decoration: none;
+            margin: 0 15px;
+            padding: 8px 16px;
+            border-radius: 6px;
+            transition: background-color 0.2s;
+        }
+        
+        .nav-links a:hover {
+            background-color: var(--background-light);
+        }
+        
+        .status-card {
+            background-color: var(--background-light);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 25px;
+        }
+        
+        .status-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        .status-item:last-child {
+            border-bottom: none;
+        }
+        
+        .status-label {
+            font-weight: bold;
+            color: var(--text-dark);
+        }
+        
+        .status-value {
+            color: var(--text-light);
+            font-family: monospace;
+        }
+        
+        .status-connected {
+            color: var(--active-green);
+            font-weight: bold;
+        }
+        
+        .status-disconnected {
+            color: var(--stop-red);
+            font-weight: bold;
+        }
+        
+        .status-hotspot {
+            color: var(--warning-orange);
+            font-weight: bold;
+        }
+        
+        .section-card {
+            background-color: var(--card-background);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 25px;
+        }
+        
+        .section-title {
+            font-size: 1.2em;
+            font-weight: bold;
+            color: var(--primary-blue);
+            margin-bottom: 15px;
+            padding-bottom: 8px;
+            border-bottom: 2px solid var(--border-color);
+        }
+        
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        .form-group label {
+            display: block;
+            font-weight: bold;
+            margin-bottom: 5px;
+            color: var(--text-dark);
+        }
+        
+        .form-group input, .form-group select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            font-size: 1em;
+            box-sizing: border-box;
+        }
+        
+        .form-group input[type="password"] {
+            font-family: monospace;
+        }
+        
+        .btn {
+            padding: 12px 20px;
+            font-size: 1em;
+            font-weight: bold;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+        
+        .btn-primary { background-color: var(--primary-blue); }
+        .btn-primary:hover { background-color: #166fe5; }
+        
+        .btn-success { background-color: var(--active-green); }
+        .btn-success:hover { background-color: #218838; }
+        
+        .btn-warning { background-color: var(--warning-orange); }
+        .btn-warning:hover { background-color: #e66a00; }
+        
+        .btn-danger { background-color: var(--stop-red); }
+        .btn-danger:hover { background-color: #c82333; }
+        
+        .btn:disabled {
+            background-color: var(--disabled-grey);
+            cursor: not-allowed;
+        }
+        
+        .wifi-network {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            margin-bottom: 8px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        
+        .wifi-network:hover {
+            background-color: var(--background-light);
+        }
+        
+        .wifi-network.selected {
+            background-color: #e7f3ff;
+            border-color: var(--primary-blue);
+        }
+        
+        .wifi-info {
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .wifi-ssid {
+            font-weight: bold;
+            color: var(--text-dark);
+        }
+        
+        .wifi-details {
+            font-size: 0.9em;
+            color: var(--text-light);
+        }
+        
+        .wifi-quality {
+            color: var(--text-light);
+            font-size: 0.9em;
+        }
+        
+        .loading {
+            text-align: center;
+            color: var(--text-light);
+            padding: 20px;
+        }
+        
+        .message {
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 15px;
+        }
+        
+        .message-success {
+            background-color: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        
+        .message-error {
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+        
+        .message-warning {
+            background-color: #fff3cd;
+            border: 1px solid #ffeaa7;
+            color: #856404;
+        }
+        
+        .hotspot-info {
+            background-color: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 6px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .hotspot-info h3 {
+            margin: 0 0 10px 0;
+            color: var(--warning-orange);
+        }
+        
+        .credentials {
+            font-family: monospace;
+            background-color: white;
+            padding: 8px;
+            border-radius: 4px;
+            margin: 5px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Network Configuration</h1>
+        
+        <div class="nav-links">
+            <a href="/">← Back to Sprinkler Control</a>
+            <a href="/network">Network Settings</a>
+        </div>
+        
+        <!-- Network Status -->
+        <div class="status-card">
+            <div class="section-title">Network Status</div>
+            <div class="status-item">
+                <span class="status-label">Connection Status:</span>
+                <span class="status-value" id="connection-status">Loading...</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">IP Address:</span>
+                <span class="status-value" id="ip-address">Loading...</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">Network Interface:</span>
+                <span class="status-value" id="network-interface">Loading...</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">Internet Access:</span>
+                <span class="status-value" id="internet-status">Loading...</span>
+            </div>
+        </div>
+        
+        <!-- Hotspot Info (shown when in hotspot mode) -->
+        <div id="hotspot-info" class="hotspot-info" style="display: none;">
+            <h3>📡 Hotspot Mode Active</h3>
+            <p>Your sprinkler controller is running in hotspot mode because no network connection was found.</p>
+            <p><strong>Hotspot Details:</strong></p>
+            <div class="credentials">Network Name: SprinklerController</div>
+            <div class="credentials">Password: sprinkler123</div>
+            <p>Connect your device to this network and configure WiFi below to connect to your home network.</p>
+        </div>
+        
+        <!-- Messages -->
+        <div id="messages"></div>
+        
+        <!-- WiFi Configuration -->
+        <div class="section-card">
+            <div class="section-title">WiFi Configuration</div>
+            
+            <button id="scan-btn" class="btn btn-primary" onclick="scanWiFi()">
+                🔍 Scan for Networks
+            </button>
+            
+            <div id="wifi-networks" class="loading" style="display: none;">
+                Scanning for networks...
+            </div>
+            
+            <div id="wifi-form" style="display: none;">
+                <div class="form-group">
+                    <label for="wifi-ssid">Network Name (SSID):</label>
+                    <input type="text" id="wifi-ssid" placeholder="Enter network name" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="wifi-password">Password:</label>
+                    <input type="password" id="wifi-password" placeholder="Enter network password">
+                </div>
+                
+                <button id="connect-btn" class="btn btn-success" onclick="connectWiFi()">
+                    📶 Connect to WiFi
+                </button>
+                
+                <button class="btn btn-primary" onclick="showManualForm()">
+                    ✏️ Enter Manually
+                </button>
+            </div>
+        </div>
+        
+        <!-- Hotspot Controls -->
+        <div class="section-card">
+            <div class="section-title">Hotspot Controls</div>
+            <p>Use these controls to manage the WiFi hotspot feature:</p>
+            
+            <button id="start-hotspot-btn" class="btn btn-warning" onclick="startHotspot()">
+                📡 Start Hotspot
+            </button>
+            
+            <button class="btn btn-primary" onclick="refreshStatus()">
+                🔄 Refresh Status
+            </button>
+        </div>
+        
+        <!-- Advanced Network Info -->
+        <div class="section-card">
+            <div class="section-title">Advanced Information</div>
+            <div id="advanced-info">
+                <p>Loading system information...</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let selectedNetwork = null;
+        let networkStatus = {};
+        
+        // Initialize page
+        document.addEventListener('DOMContentLoaded', function() {
+            refreshStatus();
+        });
+        
+        function showMessage(message, type = 'success') {
+            const messagesDiv = document.getElementById('messages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message message-${type}`;
+            messageDiv.textContent = message;
+            messagesDiv.appendChild(messageDiv);
+            
+            // Auto-remove after 5 seconds
+            setTimeout(() => {
+                if (messageDiv.parentNode) {
+                    messageDiv.parentNode.removeChild(messageDiv);
+                }
+            }, 5000);
+        }
+        
+        async function refreshStatus() {
+            try {
+                const response = await fetch('/api/network_status');
+                const data = await response.json();
+                networkStatus = data;
+                
+                // Update status display
+                document.getElementById('connection-status').textContent = 
+                    data.connected ? 'Connected' : 'Disconnected';
+                document.getElementById('connection-status').className = 
+                    'status-value ' + (data.connected ? 'status-connected' : 'status-disconnected');
+                
+                document.getElementById('ip-address').textContent = 
+                    data.ip_address || 'Not available';
+                
+                document.getElementById('network-interface').textContent = 
+                    data.interface || 'Not available';
+                
+                document.getElementById('internet-status').textContent = 
+                    data.internet ? 'Available' : 'Not available';
+                document.getElementById('internet-status').className = 
+                    'status-value ' + (data.internet ? 'status-connected' : 'status-disconnected');
+                
+                // Show/hide hotspot info
+                const hotspotInfo = document.getElementById('hotspot-info');
+                if (data.hotspot_mode) {
+                    hotspotInfo.style.display = 'block';
+                } else {
+                    hotspotInfo.style.display = 'none';
+                }
+                
+                // Update advanced info
+                updateAdvancedInfo(data);
+                
+            } catch (error) {
+                console.error('Error refreshing status:', error);
+                showMessage('Error refreshing network status', 'error');
+            }
+        }
+        
+        function updateAdvancedInfo(data) {
+            const advancedDiv = document.getElementById('advanced-info');
+            advancedDiv.innerHTML = `
+                <div class="status-item">
+                    <span class="status-label">Hotspot Mode:</span>
+                    <span class="status-value">${data.hotspot_mode ? 'Active' : 'Inactive'}</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">System Ready:</span>
+                    <span class="status-value status-connected">Yes</span>
+                </div>
+            `;
+        }
+        
+        async function scanWiFi() {
+            const scanBtn = document.getElementById('scan-btn');
+            const networksDiv = document.getElementById('wifi-networks');
+            
+            scanBtn.disabled = true;
+            scanBtn.textContent = '🔍 Scanning...';
+            networksDiv.style.display = 'block';
+            networksDiv.innerHTML = '<div class="loading">Scanning for networks...</div>';
+            
+            try {
+                const response = await fetch('/api/wifi_scan');
+                const data = await response.json();
+                
+                if (data.networks && data.networks.length > 0) {
+                    displayNetworks(data.networks);
+                } else {
+                    networksDiv.innerHTML = '<div class="loading">No networks found. Try scanning again.</div>';
+                }
+            } catch (error) {
+                console.error('Error scanning WiFi:', error);
+                networksDiv.innerHTML = '<div class="loading">Error scanning for networks. Try again.</div>';
+            } finally {
+                scanBtn.disabled = false;
+                scanBtn.textContent = '🔍 Scan for Networks';
+            }
+        }
+        
+        function displayNetworks(networks) {
+            const networksDiv = document.getElementById('wifi-networks');
+            let html = '<h4>Available Networks (click to select):</h4>';
+            
+            networks.forEach((network, index) => {
+                const quality = network.quality || 'Unknown';
+                const encrypted = network.encrypted ? '🔒' : '🔓';
+                
+                html += `
+                    <div class="wifi-network" onclick="selectNetwork('${network.ssid}', ${index})">
+                        <div class="wifi-info">
+                            <div class="wifi-ssid">${encrypted} ${network.ssid}</div>
+                            <div class="wifi-details">${encrypted === '🔒' ? 'Password required' : 'Open network'}</div>
+                        </div>
+                        <div class="wifi-quality">Signal: ${quality}</div>
+                    </div>
+                `;
+            });
+            
+            networksDiv.innerHTML = html;
+            
+            // Show form
+            document.getElementById('wifi-form').style.display = 'block';
+        }
+        
+        function selectNetwork(ssid, index) {
+            // Remove previous selection
+            document.querySelectorAll('.wifi-network').forEach(el => {
+                el.classList.remove('selected');
+            });
+            
+            // Select current network
+            document.querySelectorAll('.wifi-network')[index].classList.add('selected');
+            
+            // Update form
+            document.getElementById('wifi-ssid').value = ssid;
+            document.getElementById('wifi-password').focus();
+            
+            selectedNetwork = ssid;
+        }
+        
+        function showManualForm() {
+            document.getElementById('wifi-form').style.display = 'block';
+            document.getElementById('wifi-ssid').value = '';
+            document.getElementById('wifi-password').value = '';
+            document.getElementById('wifi-ssid').focus();
+        }
+        
+        async function connectWiFi() {
+            const ssid = document.getElementById('wifi-ssid').value.trim();
+            const password = document.getElementById('wifi-password').value;
+            const connectBtn = document.getElementById('connect-btn');
+            
+            if (!ssid) {
+                showMessage('Please enter a network name (SSID)', 'error');
+                return;
+            }
+            
+            connectBtn.disabled = true;
+            connectBtn.textContent = '📶 Connecting...';
+            
+            try {
+                const response = await fetch('/api/connect_wifi', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        ssid: ssid,
+                        password: password
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showMessage(data.message + ' The page will refresh in 15 seconds to show the new connection status.', 'success');
+                    
+                    // Clear form
+                    document.getElementById('wifi-ssid').value = '';
+                    document.getElementById('wifi-password').value = '';
+                    
+                    // Refresh status after delay
+                    setTimeout(refreshStatus, 15000);
+                    
+                } else {
+                    showMessage('Error: ' + data.error, 'error');
+                }
+                
+            } catch (error) {
+                console.error('Error connecting to WiFi:', error);
+                showMessage('Error connecting to WiFi. Please try again.', 'error');
+            } finally {
+                connectBtn.disabled = false;
+                connectBtn.textContent = '📶 Connect to WiFi';
+            }
+        }
+        
+        async function startHotspot() {
+            const startBtn = document.getElementById('start-hotspot-btn');
+            startBtn.disabled = true;
+            startBtn.textContent = '📡 Starting Hotspot...';
+            
+            try {
+                const response = await fetch('/api/start_hotspot', {
+                    method: 'POST'
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showMessage(data.message, 'success');
+                    refreshStatus();
+                } else {
+                    showMessage('Error: ' + data.error, 'error');
+                }
+                
+            } catch (error) {
+                console.error('Error starting hotspot:', error);
+                showMessage('Error starting hotspot. Please try again.', 'error');
+            } finally {
+                startBtn.disabled = false;
+                startBtn.textContent = '📡 Start Hotspot';
+            }
+        }
+        
+        // Auto-refresh status every 30 seconds
+        setInterval(refreshStatus, 30000);
+    </script>
+</body>
+</html>

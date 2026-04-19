@@ -1,0 +1,26 @@
+# Claude Code internal
+.claude/
+
+# Python
+sprinkler_controller/venv/
+sprinkler_controller/__pycache__/
+sprinkler_controller/*.pyc
+sprinkler_controller/logs/
+*.egg-info/
+
+# Arduino build cache
+esp32_firmware/**/.arduino15/
+esp32_firmware/**/build/
+esp32_firmware/**/*.elf
+esp32_firmware/**/*.bin
+esp32_firmware/**/*.map
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor
+.vscode/
+*.swp
+*~

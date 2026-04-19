@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sprinkler Control</title>
+    
+    <style>
+        :root {
+            --primary-blue: #1877f2;
+            --active-green: #28a745;
+            --stop-red: #dc3545;
+            --disabled-grey: #9E9E9E;
+            --inactive-grey: #6c757d;
+            --text-dark: #1c1e21;
+            --text-light: #606770;
+            --background-light: #f0f2f5;
+            --card-background: #fff;
+            --border-color: #dddfe2;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--background-light);
+            color: var(--text-dark);
+            margin: 0;
+            padding: 15px;
+            display: flex;
+            justify-content: center;
+        }
+        .container {
+            width: 100%;
+            max-width: 800px;
+            background-color: var(--card-background);
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            padding: 20px;
+        }
+        h1 {
+            text-align: center;
+            color: var(--primary-blue);
+            margin-bottom: 20px;
+        }
+        .schedule-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 15px;
+        }
+        @media (min-width: 600px) { .schedule-grid { grid-template-columns: 1fr 1fr; } }
+        @media (min-width: 900px) { .schedule-grid { grid-template-columns: 1fr 1fr 1fr; } }
+        .day-card {
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 15px;
+            transition: background-color 0.3s, box-shadow 0.3s;
+        }
+        .day-card.active {
+            background-color: #e7f3ff;
+            border-color: var(--primary-blue);
+        }
+        .day-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        .day-name { font-weight: bold; font-size: 1.1em; }
+        .toggle-switch { position: relative; display: inline-block; width: 50px; height: 28px; }
+        .toggle-switch input { display: none; }
+        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; transition: .4s; border-radius: 28px; }
+        .slider:before { position: absolute; content: ""; height: 20px; width: 20px; left: 4px; bottom: 4px; background-color: white; transition: .4s; border-radius: 50%; }
+        input:checked + .slider { background-color: var(--primary-blue); }
+        input:checked + .slider:before { transform: translateX(22px); }
+        label { display: block; margin-top: 10px; font-size: 0.9em; color: var(--text-light); }
+        .status { text-align: center; margin-top: 20px; font-style: italic; color: var(--text-light); }
+        
+        .time-inputs, .sprinkler-inputs {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(60px, 1fr));
+            gap: 10px;
+            align-items: center;
+        }
+        select {
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 8px;
+            width: 100%;
+            background-color: #f5f6f7;
+        }
+        .master-controls {
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+        .master-btn {
+            flex-grow: 1;
+            padding: 12px;
+            font-size: 1em;
+            font-weight: bold;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        #toggle-schedule-btn.enabled { background-color: var(--stop-red); } 
+        #toggle-schedule-btn.disabled { background-color: var(--inactive-grey); }
+        #open-settings-btn { background-color: var(--primary-blue); }
+
+        /* NEW: Current Time Display */
+        .current-time-display {
+            text-align: center;
+            margin-bottom: 20px;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+        }
+        .current-time-display .time-label {
+            font-size: 0.9em;
+            color: var(--text-light);
+            margin-bottom: 5px;
+        }
+        .current-time-display .time-value {
+            font-size: 1.3em;
+            font-weight: bold;
+            color: var(--primary-blue);
+            font-family: monospace;
+        }
+        .current-time-display .day-value {
+            font-size: 1.1em;
+            font-weight: 600;
+            color: var(--text-light);
+            margin-top: 5px;
+        }
+
+        .duration-container {
+            position: relative;
+            min-height: 100px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center; 
+        }
+        
+        .duration-label, .sprinkler-label { font-weight: bold; }
+        .duration-label { width: 100%; text-align: center; }
+        .duration-label.is-counting { font-size: 1.6em; }   
+        .duration-label.is-counting .countdown-text {
+            color: var(--active-green);
+            font-weight: bold;
+            margin-left: 10px; 
+        }
+        .sprinkler-label {
+            transition: background-color 0.3s, color 0.3s;
+            padding: 2px 4px;
+            border-radius: 4px;
+        }
+        .sprinkler-label.active-sprinkler {
+            background-color: var(--active-green);
+            color: white;
+        }
+        .run-now-btn {
+            width: 100%;
+            padding: 8px;
+            margin-top: 15px;
+            background-color: var(--inactive-grey); 
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .run-now-btn:disabled {
+            background-color: var(--disabled-grey);
+            cursor: not-allowed;
+        }
+        .run-now-btn.running { background-color: var(--active-green); }
+        
+        /* --- Modal (Popup) Styles --- */
+        .modal {
+            display: none; 
+            position: fixed; 
+            z-index: 1000; 
+            left: 0;
+            top: 0;
+            width: 100%; 
+            height: 100%; 
+            overflow: auto; 
+            background-color: rgba(0,0,0,0.5); 
+        }
+        .modal-content {
+            background-color: #fefefe;
+            margin: 10% auto;
+            padding: 25px;
+            border: 1px solid #888;
+            width: 90%;
+            max-width: 600px;
+            border-radius: 8px;
+            position: relative;
+        }
+        .close-btn {
+            color: #aaa;
+            position: absolute;
+            top: 15px;
+            right: 25px;
+            font-size: 28px;
+            font-weight: bold;
+        }
+        .close-btn:hover, .close-btn:focus {
+            color: black;
+            text-decoration: none;
+            cursor: pointer;
+        }
+        
+        /* NEW: Improved Settings Modal Layout */
+        .modal-section {
+            margin-bottom: 25px;
+        }
+        .modal-section h3 {
+            margin: 0 0 15px 0;
+            color: var(--primary-blue);
+            border-bottom: 2px solid var(--border-color);
+            padding-bottom: 5px;
+        }
+        .current-time-section {
+            text-align: center;
+            padding: 15px;
+            background-color: var(--background-light);
+            border-radius: 6px;
+            margin-bottom: 20px;
+        }
+        .current-time-section .time-display {
+            font-size: 1.4em;
+            font-weight: bold;
+            color: var(--primary-blue);
+            font-family: monospace;
+        }
+        
+        .time-set-controls {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+            gap: 15px;
+            align-items: end;
+        }
+        .form-group {
+            display: flex;
+            flex-direction: column;
+        }
+        .form-group label {
+            font-weight: bold;
+            margin-bottom: 5px;
+            color: var(--text-dark);
+            font-size: 0.9em;
+        }
+        .form-group select {
+            padding: 8px;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            background-color: white;
+            font-size: 1em;
+        }
+        #set-time-btn { 
+            background-color: var(--primary-blue);
+            height: fit-content;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Weekly Sprinkler Control</h1>
+        
+        <div class="master-controls">
+            <button id="toggle-schedule-btn" class="master-btn"></button>
+            <button id="open-settings-btn" class="master-btn">System Settings</button>
+        </div>
+        
+        <!-- NEW: Current Time Display on Main Screen -->
+        <div class="current-time-display">
+            <div class="time-label">Current System Time</div>
+            <div class="time-value" id="main-time-display">Loading...</div>
+            <div class="day-value" id="main-day-display">Loading...</div>
+        </div>
+        
+        <div id="schedule-grid" class="schedule-grid"></div>
+        <div id="status" class="status">Loading schedule...</div>
+    </div>
+
+    <!-- The Modal for settings -->
+    <div id="settings-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-btn">&times;</span>
+            <h2>System Settings</h2>
+            
+            <!-- Current Time Section -->
+            <div class="modal-section">
+                <h3>Current System Time</h3>
+                <div class="current-time-section">
+                    <div class="time-display" id="current-time-display">--:--:--</div>
+                </div>
+            </div>
+            
+            <!-- Set Time Section -->
+            <div class="modal-section">
+                <h3>Set New Date & Time</h3>
+                <div class="time-set-controls">
+                    <div class="form-group">
+                        <label for="year-select">Year</label>
+                        <select id="year-select"></select>
+                    </div>
+                    <div class="form-group">
+                        <label for="month-select">Month</label>
+                        <select id="month-select"></select>
+                    </div>
+                    <div class="form-group">
+                        <label for="day-select">Day</label>
+                        <select id="day-select"></select>
+                    </div>
+                    <div class="form-group">
+                        <label for="hour-select">Hour (24h)</label>
+                        <select id="hour-select"></select>
+                    </div>
+                    <div class="form-group">
+                        <label for="minute-select">Minute</label>
+                        <select id="minute-select"></select>
+                    </div>
+                    <button id="set-time-btn" class="master-btn">Set Time</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Main UI elements
+            const scheduleGrid = document.getElementById('schedule-grid');
+            const statusDiv = document.getElementById('status');
+            const toggleScheduleBtn = document.getElementById('toggle-schedule-btn');
+            const mainTimeDisplay = document.getElementById('main-time-display');
+            const mainDayDisplay = document.getElementById('main-day-display');
+
+            // Modal elements
+            const settingsModal = document.getElementById('settings-modal');
+            const openSettingsBtn = document.getElementById('open-settings-btn');
+            const closeBtn = document.querySelector('.close-btn');
+            const currentTimeDisplay = document.getElementById('current-time-display');
+            const yearSelect = document.getElementById('year-select');
+            const monthSelect = document.getElementById('month-select');
+            const daySelect = document.getElementById('day-select');
+            const hourSelect = document.getElementById('hour-select');
+            const minuteSelect = document.getElementById('minute-select');
+            const setTimeBtn = document.getElementById('set-time-btn');
+            
+            let weeklySchedule = [];
+            let runningDayIndex = null; 
+
+            // --- Time Functions ---
+            function updateDayOptions() {
+                const year = parseInt(yearSelect.value);
+                const month = parseInt(monthSelect.value);
+                const currentDay = parseInt(daySelect.value) || new Date().getDate();
+                daySelect.innerHTML = '';
+                const daysInMonth = new Date(year, month, 0).getDate();
+                for (let i = 1; i <= daysInMonth; i++) {
+                    const isSelected = (i === currentDay && i <= daysInMonth) || (currentDay > daysInMonth && i === daysInMonth);
+                    daySelect.innerHTML += `<option value="${i}" ${isSelected ? 'selected' : ''}>${String(i).padStart(2, '0')}</option>`;
+                }
+            }
+
+            function populateTimeSelectors() {
+                const now = new Date();
+                
+                // Populate year selector
+                for (let i = now.getFullYear() - 5; i <= now.getFullYear() + 5; i++) {
+                    yearSelect.innerHTML += `<option value="${i}" ${i === now.getFullYear() ? 'selected' : ''}>${i}</option>`;
+                }
+                
+                // Populate month selector
+                const months = [
+                    'January', 'February', 'March', 'April', 'May', 'June',
+                    'July', 'August', 'September', 'October', 'November', 'December'
+                ];
+                for (let i = 1; i <= 12; i++) {
+                    const isSelected = i === now.getMonth() + 1 ? 'selected' : '';
+                    monthSelect.innerHTML += `<option value="${i}" ${isSelected}>${String(i).padStart(2, '0')} - ${months[i-1]}</option>`;
+                }
+                
+                // Populate hour selector
+                for (let i = 0; i < 24; i++) {
+                    const isSelected = i === now.getHours() ? 'selected' : '';
+                    hourSelect.innerHTML += `<option value="${i}" ${isSelected}>${String(i).padStart(2, '0')}</option>`;
+                }
+                
+                // Populate minute selector
+                for (let i = 0; i < 60; i++) {
+                    const isSelected = i === now.getMinutes() ? 'selected' : '';
+                    minuteSelect.innerHTML += `<option value="${i}" ${isSelected}>${String(i).padStart(2, '0')}</option>`;
+                }
+                
+                updateDayOptions();
+            }
+
+            async function fetchTime() {
+                try {
+                    const response = await fetch('/api/get_time');
+                    const data = await response.json();
+                    if(data.time) {
+                        // Update both displays
+                        currentTimeDisplay.textContent = data.time;
+                        mainTimeDisplay.textContent = data.time;
+                        
+                        // Extract and display day of week
+                        const timeStr = data.time;
+                        // Try to parse the date from the time string to get day of week
+                        try {
+                            // Most systems return date in format like "Sat 30 Aug 2025 10:15:30 AM PDT"
+                            // or "2025-08-30 10:15:30"
+                            const now = new Date();
+                            const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+                            const dayName = dayNames[now.getDay()];
+                            mainDayDisplay.textContent = dayName;
+                        } catch (dayError) {
+                            // Fallback - just show current browser day
+                            const now = new Date();
+                            const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+                            const dayName = dayNames[now.getDay()];
+                            mainDayDisplay.textContent = dayName;
+                        }
+                    }
+                } catch (error) { 
+                    currentTimeDisplay.textContent = "Error loading time."; 
+                    mainTimeDisplay.textContent = "Error loading time.";
+                    mainDayDisplay.textContent = "Error loading day.";
+                }
+            }
+
+            // --- Schedule Functions ---
+            function buildUI() {
+                scheduleGrid.innerHTML = '';
+                weeklySchedule.forEach((daySchedule, index) => {
+                    const card = document.createElement('div');
+                    card.className = 'day-card' + (daySchedule.is_active ? ' active' : '');
+                    card.dataset.dayIndex = index;
+                    const hourOptions = Array.from({length: 24}, (_, i) => `<option value="${i}" ${daySchedule.hour == i ? 'selected' : ''}>${String(i).padStart(2, '0')}</option>`).join('');
+                    const minuteOptions = Array.from({length: 60}, (_, i) => `<option value="${i}" ${daySchedule.minute == i ? 'selected' : ''}>${String(i).padStart(2, '0')}</option>`).join('');
+                    let sprinklerHtml = '';
+                    for (let i = 0; i < 4; i++) {
+                        const durationOptions = Array.from({length: 101}, (_, j) => `<option value="${j}" ${daySchedule.durations[i] == j ? 'selected' : ''}>${j}</option>`).join('');
+                        sprinklerHtml += `<div><label class="sprinkler-label" data-sprinkler-index="${i}">Sprinkler ${i + 1}</label><select class="duration-select" data-sprinkler-index="${i}">${durationOptions}</select></div>`;
+                    }
+                    card.innerHTML = `
+                        <div class="day-header"><span class="day-name">${['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'][index]}</span><label class="toggle-switch"><input type="checkbox" class="day-toggle" ${daySchedule.is_active ? 'checked' : ''}><span class="slider"></span></label></div>
+                        <label>Start Time (Hour:Minute)</label>
+                        <div class="time-inputs"><select class="hour-select">${hourOptions}</select><select class="minute-select">${minuteOptions}</select></div>
+                        <div class="duration-container">
+                             <label class="duration-label">Durations (minutes)</label>
+                             <div class="sprinkler-inputs">${sprinklerHtml}</div>
+                        </div>
+                        <button class="run-now-btn" ${!daySchedule.is_active ? 'disabled' : ''}>Run Now</button>
+                    `;
+                    scheduleGrid.appendChild(card);
+                });
+                statusDiv.textContent = 'Schedule loaded.';
+            }
+
+            function updateScheduleToggleButton(isEnabled) {
+                toggleScheduleBtn.textContent = isEnabled ? 'Deactivate Schedule' : 'Activate Schedule';
+                toggleScheduleBtn.className = isEnabled ? 'master-btn enabled' : 'master-btn disabled';
+            }
+            
+            async function fetchSchedule() {
+                try {
+                    const response = await fetch('/api/schedule');
+                    const data = await response.json();
+                    weeklySchedule = data.schedule;
+                    buildUI();
+                    updateScheduleToggleButton(data.enabled);
+                } catch (error) { statusDiv.textContent = 'Error: Could not connect to the server.'; }
+            }
+
+            async function updateSchedule() { 
+                try {
+                    statusDiv.textContent = 'Saving...';
+                    const response = await fetch('/api/schedule', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(weeklySchedule)
+                    });
+                    if (response.ok) { setTimeout(() => { statusDiv.textContent = 'Changes saved successfully.'; }, 500);
+                    } else { statusDiv.textContent = 'Error: Failed to save changes.'; }
+                } catch (error) { statusDiv.textContent = 'Error: Could not connect to the server.'; }
+            }
+
+            async function pollStatus() { 
+                try {
+                    const response = await fetch('/api/status');
+                    const statusData = await response.json();
+                    if (statusData.is_running) {
+                        runningDayIndex = statusData.day_index;
+                        document.querySelectorAll('.day-card').forEach((c, index) => {
+                            const btn = c.querySelector('.run-now-btn');
+                            if (index === runningDayIndex) {
+                                btn.classList.add('running');
+                                btn.textContent = 'Sequence Running (Press to Stop)';
+                                btn.disabled = false;
+                                const durationLabel = c.querySelector('.duration-label');
+                                const sprinklerInputs = c.querySelector('.sprinkler-inputs');
+                                sprinklerInputs.style.display = 'none';
+                                durationLabel.classList.add('is-counting');
+                                const minutes = Math.floor(statusData.remaining_time / 60);
+                                const seconds = statusData.remaining_time % 60;
+                                const sprinklerNumber = statusData.active_sprinkler + 1;
+                                const timeString = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+                                durationLabel.innerHTML = `Sprinkler ${sprinklerNumber}: <span class="countdown-text">${timeString}</span>`;
+                                c.querySelectorAll('.sprinkler-label').forEach(label => {
+                                    label.classList.toggle('active-sprinkler', parseInt(label.dataset.sprinklerIndex) === statusData.active_sprinkler);
+                                });
+                            } else { btn.disabled = true; }
+                        });
+                    } else if (runningDayIndex !== null) {
+                        const lastRunCard = document.querySelector(`.day-card[data-day-index='${runningDayIndex}']`);
+                        if(lastRunCard) {
+                             const durationLabel = lastRunCard.querySelector('.duration-label');
+                             durationLabel.innerHTML = 'Durations (minutes)';
+                             durationLabel.classList.remove('is-counting');
+                             lastRunCard.querySelector('.sprinkler-inputs').style.display = 'grid';
+                             lastRunCard.querySelectorAll('.sprinkler-label').forEach(label => label.classList.remove('active-sprinkler'));
+                        }
+                        document.querySelectorAll('.day-card').forEach((c, index) => {
+                             const btn = c.querySelector('.run-now-btn');
+                             btn.classList.remove('running');
+                             btn.textContent = 'Run Now';
+                             btn.disabled = !weeklySchedule[index].is_active;
+                        });
+                        statusDiv.textContent = 'Sequence finished.';
+                        runningDayIndex = null;
+                    }
+                } catch (error) { console.error("Status poll failed:", error); }
+            }
+
+            // --- Event Listeners ---
+            scheduleGrid.addEventListener('change', function(event) {
+                const target = event.target;
+                const card = target.closest('.day-card');
+                if (!card) return;
+                const dayIndex = parseInt(card.dataset.dayIndex);
+                const runNowBtn = card.querySelector('.run-now-btn');
+                if (target.classList.contains('day-toggle')) {
+                    weeklySchedule[dayIndex].is_active = target.checked;
+                    card.classList.toggle('active', target.checked);
+                    runNowBtn.disabled = !target.checked;
+                } else if (target.classList.contains('hour-select')) {
+                    weeklySchedule[dayIndex].hour = parseInt(target.value);
+                } else if (target.classList.contains('minute-select')) {
+                    weeklySchedule[dayIndex].minute = parseInt(target.value);
+                } else if (target.classList.contains('duration-select')) {
+                    const sprinklerIndex = parseInt(target.dataset.sprinklerIndex);
+                    weeklySchedule[dayIndex].durations[sprinklerIndex] = parseInt(target.value);
+                }
+                updateSchedule();
+            });
+
+            scheduleGrid.addEventListener('click', async function(event) { 
+                const btn = event.target;
+                if (!btn.classList.contains('run-now-btn')) return;
+                if (btn.classList.contains('running')) {
+                    await fetch('/api/stop_sequence', { method: 'POST' });
+                } else {
+                    const card = btn.closest('.day-card');
+                    const dayIndex = card.dataset.dayIndex;
+                    try {
+                        const response = await fetch(`/api/run_day/${dayIndex}`, { method: 'POST' });
+                        if (!response.ok) {
+                            const errorData = await response.json();
+                            statusDiv.textContent = `Error: ${errorData.message || 'Could not start run.'}`;
+                        }
+                    } catch (error) { statusDiv.textContent = 'Error: Connection failed.'; }
+                }
+            });
+
+            toggleScheduleBtn.addEventListener('click', async function() { 
+                const response = await fetch('/api/toggle_schedule', { method: 'POST' });
+                const data = await response.json();
+                updateScheduleToggleButton(data.enabled);
+            });
+            
+            // Modal event listeners
+            openSettingsBtn.onclick = () => { 
+                settingsModal.style.display = "block"; 
+                fetchTime(); // Refresh time when opening modal
+            };
+            closeBtn.onclick = () => { settingsModal.style.display = "none"; };
+            window.onclick = (event) => { if (event.target == settingsModal) { settingsModal.style.display = "none"; }};
+            yearSelect.addEventListener('change', updateDayOptions);
+            monthSelect.addEventListener('change', updateDayOptions);
+            
+            setTimeBtn.addEventListener('click', async function() {
+                const timeData = { 
+                    year: yearSelect.value, 
+                    month: monthSelect.value, 
+                    day: daySelect.value, 
+                    hour: hourSelect.value, 
+                    minute: minuteSelect.value 
+                };
+                statusDiv.textContent = 'Setting system time...';
+                try {
+                    const response = await fetch('/api/set_time', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(timeData)
+                    });
+                    const result = await response.json();
+                    if(response.ok) {
+                        statusDiv.textContent = 'Time updated successfully!';
+                        await fetchTime(); 
+                        settingsModal.style.display = 'none'; // Close modal on success
+                    } else {
+                        statusDiv.textContent = `Error: ${result.error || 'Failed to set time.'}`;
+                    }
+                } catch (error) {
+                    statusDiv.textContent = 'Error: Could not connect to the server to set time.';
+                }
+            });
+
+            // --- Initial Load ---
+            populateTimeSelectors();
+            fetchTime();
+            setInterval(fetchTime, 10000); // Update time every 10 seconds
+            fetchSchedule();
+            setInterval(pollStatus, 1000);
+        });
+    </script>
+</body>
+</html>

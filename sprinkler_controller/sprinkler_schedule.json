@@ -1,0 +1,82 @@
+{
+    "enabled": true,
+    "schedule": [
+        {
+            "durations": [
+                1,
+                1,
+                1,
+                1
+            ],
+            "hour": 7,
+            "is_active": true,
+            "minute": 0
+        },
+        {
+            "durations": [
+                10,
+                10,
+                10,
+                10
+            ],
+            "hour": 7,
+            "is_active": false,
+            "minute": 0
+        },
+        {
+            "durations": [
+                10,
+                10,
+                10,
+                10
+            ],
+            "hour": 7,
+            "is_active": false,
+            "minute": 0
+        },
+        {
+            "durations": [
+                10,
+                10,
+                10,
+                10
+            ],
+            "hour": 7,
+            "is_active": false,
+            "minute": 0
+        },
+        {
+            "durations": [
+                10,
+                10,
+                10,
+                10
+            ],
+            "hour": 7,
+            "is_active": false,
+            "minute": 0
+        },
+        {
+            "durations": [
+                10,
+                10,
+                10,
+                10
+            ],
+            "hour": 7,
+            "is_active": false,
+            "minute": 0
+        },
+        {
+            "durations": [
+                10,
+                10,
+                10,
+                10
+            ],
+            "hour": 7,
+            "is_active": false,
+            "minute": 0
+        }
+    ]
+}
