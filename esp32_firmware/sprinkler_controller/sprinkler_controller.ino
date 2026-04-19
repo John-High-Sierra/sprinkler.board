@@ -40,6 +40,11 @@
 #include <WiFi.h>
 #include <WiFiManager.h>
 #include <WebServer.h>
+#include <ArduinoOTA.h>
+#include <Update.h>
+#include <HTTPClient.h>
+#include <HTTPUpdate.h>
+#include <WiFiClientSecure.h>
 #include <LittleFS.h>
 #include <ArduinoJson.h>
 #include <NTPClient.h>
@@ -76,6 +81,12 @@ const int RELAY_PINS[8] = {32, 33, 25, 26, 27, 14, 12, 13};
 #define AP_NAME        "SprinklerSetup"
 #define AP_PASSWORD    "sprinkler123"
 #define NTP_SERVER     "pool.ntp.org"
+#define OTA_PASSWORD   "sprinkler123"  // Password for Arduino IDE OTA and web UI upload
+#define FW_VERSION     "1.0.0"
+
+// Cloud update URLs — point these at your GitHub repo
+#define CLOUD_UI_URL  "https://raw.githubusercontent.com/John-High-Sierra/sprinkler.board/main/esp32_firmware/sprinkler_controller/data/index.html"
+#define CLOUD_FW_URL  "https://github.com/John-High-Sierra/sprinkler.board/releases/latest/download/sprinkler_controller.bin"
 #define TZ_OFFSET_SEC  -18000   // UTC-5 (EST). Change for your timezone.
                                 // UTC-6 = -21600, UTC-7 = -25200, UTC-8 = -28800
 
@@ -677,6 +688,214 @@ void setupRoutes() {
 }
 
 // ═══════════════════════════════════════════════════════════════
+//  ARDUINO OTA — firmware updates over WiFi from Arduino IDE
+// ═══════════════════════════════════════════════════════════════
+void setupOTA() {
+  ArduinoOTA.setHostname(HOSTNAME);
+  ArduinoOTA.setPassword(OTA_PASSWORD);
+
+  ArduinoOTA.onStart([]() {
+    String type = (ArduinoOTA.getCommand() == U_FLASH) ? "firmware" : "filesystem";
+    Serial.printf("[OTA] Starting %s update...\n", type.c_str());
+    allRelaysOff(); // Safety: kill all relays before flashing
+  });
+  ArduinoOTA.onEnd([]()   { Serial.println("[OTA] Update complete — rebooting"); });
+  ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
+    Serial.printf("[OTA] Progress: %u%%\r", progress * 100 / total);
+  });
+  ArduinoOTA.onError([](ota_error_t error) {
+    Serial.printf("[OTA] Error[%u]: ", error);
+    if      (error == OTA_AUTH_ERROR)    Serial.println("Auth failed");
+    else if (error == OTA_BEGIN_ERROR)   Serial.println("Begin failed");
+    else if (error == OTA_CONNECT_ERROR) Serial.println("Connect failed");
+    else if (error == OTA_RECEIVE_ERROR) Serial.println("Receive failed");
+    else if (error == OTA_END_ERROR)     Serial.println("End failed");
+  });
+
+  ArduinoOTA.begin();
+  Serial.printf("[OTA] Arduino OTA ready — hostname: %s\n", HOSTNAME);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  CLOUD UPDATE — fetch firmware .bin or index.html from GitHub
+// ═══════════════════════════════════════════════════════════════
+void setupCloudUpdateRoutes() {
+
+  // ── GET /api/version — return current firmware version ───────
+  server.on("/api/version", HTTP_GET, []() {
+    String resp = "{\"version\":\"" + String(FW_VERSION) + "\"}";
+    server.send(200, "application/json", resp);
+  });
+
+  // ── POST /api/update/ui — pull new index.html from GitHub ────
+  server.on("/api/update/ui", HTTP_POST, []() {
+    Serial.printf("[CLOUD] Downloading UI from: %s\n", CLOUD_UI_URL);
+
+    WiFiClientSecure client;
+    client.setInsecure(); // Skip cert validation — acceptable for home device
+
+    HTTPClient https;
+    if (!https.begin(client, CLOUD_UI_URL)) {
+      server.send(500, "application/json", "{\"error\":\"Failed to connect to URL\"}");
+      return;
+    }
+
+    int code = https.GET();
+    Serial.printf("[CLOUD] HTTP response: %d\n", code);
+
+    if (code != 200) {
+      https.end();
+      server.send(500, "application/json", "{\"error\":\"HTTP " + String(code) + "\"}");
+      return;
+    }
+
+    File f = LittleFS.open("/index.html", "w");
+    if (!f) {
+      https.end();
+      server.send(500, "application/json", "{\"error\":\"LittleFS write failed\"}");
+      return;
+    }
+
+    WiFiClient* stream = https.getStreamPtr();
+    size_t written = 0;
+    uint8_t buf[512];
+    unsigned long timeout = millis();
+    while ((https.connected() || stream->available()) && (millis() - timeout < 10000)) {
+      size_t avail = stream->available();
+      if (avail) {
+        size_t n = stream->readBytes(buf, min(avail, sizeof(buf)));
+        f.write(buf, n);
+        written += n;
+        timeout = millis(); // reset timeout on data received
+      }
+      delay(1);
+    }
+    f.close();
+    https.end();
+
+    Serial.printf("[CLOUD] UI update complete — %u bytes\n", written);
+    server.send(200, "application/json",
+      "{\"message\":\"UI updated\",\"bytes\":" + String(written) + "}");
+  });
+
+  // ── POST /api/update/firmware — pull .bin from GitHub releases and flash ─
+  server.on("/api/update/firmware", HTTP_POST, []() {
+    Serial.printf("[CLOUD] Downloading firmware from: %s\n", CLOUD_FW_URL);
+
+    // Send response BEFORE flashing — board reboots and can't reply after
+    server.send(200, "application/json",
+      "{\"message\":\"Firmware update started — board will reboot when done\"}");
+    delay(500);
+
+    allRelaysOff(); // Safety: kill all relays before flashing
+
+    WiFiClientSecure client;
+    client.setInsecure();
+
+    httpUpdate.setLedPin(STATUS_LED_PIN, HIGH);
+    httpUpdate.rebootOnUpdate(true);
+
+    t_httpUpdate_return ret = httpUpdate.update(client, CLOUD_FW_URL);
+    // Only reached if update failed
+    switch (ret) {
+      case HTTP_UPDATE_FAILED:
+        Serial.printf("[CLOUD] Firmware update failed: %s\n",
+          httpUpdate.getLastErrorString().c_str());
+        break;
+      case HTTP_UPDATE_NO_UPDATES:
+        Serial.println("[CLOUD] No update available");
+        break;
+      default:
+        break;
+    }
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  WEB UI UPLOAD — browser-based index.html update via /upload
+// ═══════════════════════════════════════════════════════════════
+void setupUploadRoutes() {
+
+  // Upload page — simple HTML form
+  server.on("/upload", HTTP_GET, []() {
+    String html = R"(<!DOCTYPE html><html><head>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Upload UI</title>
+<style>
+  body{font-family:sans-serif;background:#1a1a2e;color:#eee;display:flex;
+       flex-direction:column;align-items:center;justify-content:center;min-height:100vh;margin:0}
+  h2{color:#4fc3f7;margin-bottom:24px}
+  form{background:#16213e;padding:24px;border-radius:12px;display:flex;flex-direction:column;gap:16px;min-width:300px}
+  label{font-size:0.85rem;color:#90caf9}
+  input[type=file]{color:#eee}
+  input[type=password]{padding:8px;border-radius:6px;border:1px solid #0f3460;
+                        background:#0f3460;color:#eee;font-size:1rem}
+  button{padding:10px;background:#4fc3f7;color:#000;border:none;border-radius:8px;
+         font-size:1rem;font-weight:bold;cursor:pointer}
+  button:hover{background:#81d4fa}
+  #msg{margin-top:16px;font-size:0.9rem}
+</style></head><body>
+<h2>Upload New UI</h2>
+<form method="POST" action="/upload" enctype="multipart/form-data">
+  <label>Password</label>
+  <input type="password" name="password" placeholder="Enter OTA password" required>
+  <label>Select index.html</label>
+  <input type="file" name="file" accept=".html" required>
+  <button type="submit">Upload</button>
+</form>
+<div id="msg"></div>
+</body></html>)";
+    server.send(200, "text/html", html);
+  });
+
+  // Handle the file upload POST
+  static bool uploadAuthorised = false;
+  static File uploadFile;
+
+  server.on("/upload", HTTP_POST,
+    // Response handler (runs after upload completes)
+    []() {
+      if (!uploadAuthorised) {
+        server.send(403, "text/plain", "Wrong password");
+        return;
+      }
+      server.send(200, "text/html",
+        "<html><body style='font-family:sans-serif;background:#1a1a2e;color:#eee;"
+        "display:flex;align-items:center;justify-content:center;min-height:100vh'>"
+        "<div style='text-align:center'><h2 style='color:#4caf50'>Upload complete!</h2>"
+        "<p>New UI is live. <a href='/' style='color:#4fc3f7'>Go to dashboard</a></p>"
+        "</div></body></html>");
+      uploadAuthorised = false;
+    },
+    // Upload handler (runs as data arrives)
+    [&uploadFile, &uploadAuthorised]() {
+      HTTPUpload& upload = server.upload();
+
+      if (upload.status == UPLOAD_FILE_START) {
+        // Check password field sent alongside the file
+        uploadAuthorised = (server.arg("password") == OTA_PASSWORD);
+        if (!uploadAuthorised) {
+          Serial.println("[UPLOAD] Wrong password — rejecting");
+          return;
+        }
+        Serial.printf("[UPLOAD] Receiving: %s\n", upload.filename.c_str());
+        uploadFile = LittleFS.open("/index.html", "w");
+        if (!uploadFile) Serial.println("[UPLOAD] Failed to open file for writing");
+      }
+      else if (upload.status == UPLOAD_FILE_WRITE && uploadAuthorised) {
+        if (uploadFile) uploadFile.write(upload.buf, upload.currentSize);
+      }
+      else if (upload.status == UPLOAD_FILE_END && uploadAuthorised) {
+        if (uploadFile) {
+          uploadFile.close();
+          Serial.printf("[UPLOAD] Done — %u bytes written to /index.html\n", upload.totalSize);
+        }
+      }
+    }
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
 //  WIFI RESET CHECK — hold IO0 button for 3 s at boot to wipe
 //  saved WiFi credentials and force the setup portal to open
 // ═══════════════════════════════════════════════════════════════
@@ -813,11 +1032,17 @@ void setup() {
   timeClient.update();
   Serial.printf("[BOOT] NTP time: %s\n", timeClient.getFormattedTime().c_str());
 
+  // OTA firmware updates (Arduino IDE over WiFi)
+  setupOTA();
+
   // Web server
   setupRoutes();
+  setupCloudUpdateRoutes();
+  setupUploadRoutes();
   server.begin();
   Serial.println("[BOOT] Web server started on port 80");
-  Serial.printf("[BOOT] Access UI at: http://%s/\n", WiFi.localIP().toString().c_str());
+  Serial.printf("[BOOT] Access UI at:     http://%s/\n", WiFi.localIP().toString().c_str());
+  Serial.printf("[BOOT] Upload new UI at: http://%s/upload\n", WiFi.localIP().toString().c_str());
 
   // Background tasks
   xTaskCreate(scheduleCheckerTask, "sched_check", 4096, NULL, 1, NULL);
@@ -830,6 +1055,7 @@ void setup() {
 //  LOOP (just NTP keepalive — real work is in tasks/async server)
 // ═══════════════════════════════════════════════════════════════
 void loop() {
+  ArduinoOTA.handle();
   server.handleClient();
   static unsigned long lastNTP = 0;
   if (millis() - lastNTP > 300000) { // Resync every 5 min

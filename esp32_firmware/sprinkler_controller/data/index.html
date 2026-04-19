@@ -110,6 +110,9 @@ select:focus, input[type="number"]:focus { outline: none; border-color: #4fc3f7;
 .settings-val { font-size: 1.05rem; color: #4fc3f7; font-weight: 600; text-align: right; }
 .zname-inp { background: #0f2030; border: 2px solid #1a4a7a; color: #eee; padding: 10px 12px; border-radius: 8px; font-size: 1.1rem; width: 60%; font-family: inherit; }
 .zname-inp:focus { outline: none; border-color: #4fc3f7; }
+.upd-btn { width:100%; padding:13px; background:#1a3a5c; color:#4fc3f7; border:2px solid #1a5a8c; border-radius:10px; font-size:1.05rem; font-weight:700; cursor:pointer; font-family:inherit; }
+.upd-btn:active { opacity:0.75; }
+.upd-btn:disabled { opacity:0.4; cursor:not-allowed; }
 
 /* ── Sys Status page ──────────────────────────────────── */
 .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
@@ -231,6 +234,24 @@ select:focus, input[type="number"]:focus { outline: none; border-color: #4fc3f7;
 
   <div class="sec-hdr"><span class="sec-title">Zone Names</span></div>
   <div class="settings-section" id="zoneNamesList"></div>
+
+  <div class="sec-hdr"><span class="sec-title">Updates</span></div>
+  <div class="settings-section">
+    <div class="settings-row" style="flex-direction:column;align-items:flex-start;gap:10px">
+      <div style="display:flex;justify-content:space-between;width:100%;align-items:center">
+        <span class="settings-label">Firmware</span>
+        <span class="settings-val" id="upd-fw-ver">v—</span>
+      </div>
+      <button class="upd-btn" id="btn-upd-fw" onclick="cloudUpdate('firmware')">Download &amp; Flash from GitHub</button>
+    </div>
+    <div class="settings-row" style="flex-direction:column;align-items:flex-start;gap:10px">
+      <span class="settings-label">Web UI</span>
+      <button class="upd-btn" id="btn-upd-ui" onclick="cloudUpdate('ui')">Download &amp; Apply from GitHub</button>
+    </div>
+    <div class="settings-row" id="upd-status-row" style="display:none">
+      <span id="upd-status" style="font-size:1rem;color:#4fc3f7;width:100%;text-align:center"></span>
+    </div>
+  </div>
 </div>
 
 <!-- ══ SYS STATUS ════════════════════════════════════════ -->
@@ -604,11 +625,55 @@ function updateZname(i, v) {
   if (lastStatus) highlightRunningZone(lastStatus);
 }
 
+// ── Cloud Updates ──────────────────────────────────────
+async function cloudUpdate(type) {
+  const isfw = type === 'firmware';
+  const btn = document.getElementById(isfw ? 'btn-upd-fw' : 'btn-upd-ui');
+  const row = document.getElementById('upd-status-row');
+  const status = document.getElementById('upd-status');
+
+  if (!confirm(isfw
+    ? 'Download and flash new firmware from GitHub?\nThe board will reboot when done.'
+    : 'Download and apply new UI from GitHub?\nThe page will reload when done.')) return;
+
+  btn.disabled = true;
+  row.style.display = 'flex';
+  status.style.color = '#4fc3f7';
+  status.textContent = isfw ? 'Downloading firmware...' : 'Downloading UI...';
+
+  try {
+    const r = await POST(`/api/update/${type}`);
+    if (isfw) {
+      status.style.color = '#81c784';
+      status.textContent = 'Flashing... board will reboot shortly.';
+      // Wait for reboot then reload
+      setTimeout(() => location.reload(), 15000);
+    } else {
+      status.style.color = '#81c784';
+      status.textContent = `Done — ${r.bytes || ''} bytes. Reloading...`;
+      setTimeout(() => location.reload(), 2000);
+    }
+  } catch(e) {
+    status.style.color = '#ef5350';
+    status.textContent = 'Update failed — check Serial Monitor';
+    btn.disabled = false;
+  }
+}
+
+async function loadFwVersion() {
+  try {
+    const r = await GET('/api/version');
+    const el = document.getElementById('upd-fw-ver');
+    if (el && r.version) el.textContent = 'v' + r.version;
+  } catch(e) {}
+}
+
 // ── Boot ───────────────────────────────────────────────
 loadSchedule();
 initManualSelect();
 pollStatus();
 pollInfo();
+loadFwVersion();
 setInterval(pollStatus, 2000);
 setInterval(pollInfo, 15000);
 </script>
