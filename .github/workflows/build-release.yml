@@ -1,0 +1,50 @@
+name: Build and Release Firmware
+
+# Triggered when you push a version tag e.g. v1.1.0
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install arduino-cli
+        uses: arduino/setup-arduino-cli@v2
+
+      - name: Install ESP32 platform
+        run: |
+          arduino-cli config init
+          arduino-cli config add board_manager.additional_urls \
+            https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
+          arduino-cli core update-index
+          arduino-cli core install esp32:esp32@3.3.8
+
+      - name: Install libraries
+        run: |
+          arduino-cli lib install "WiFiManager"
+          arduino-cli lib install "ArduinoJson"
+          arduino-cli lib install "NTPClient"
+
+      - name: Compile sketch
+        run: |
+          arduino-cli compile \
+            --fqbn esp32:esp32:esp32:PartitionScheme=default \
+            --export-binaries \
+            esp32_firmware/sprinkler_controller
+
+      - name: Rename binary
+        run: |
+          cp "esp32_firmware/sprinkler_controller/build/esp32.esp32.esp32/sprinkler_controller.ino.bin" \
+             "sprinkler_controller.bin"
+
+      - name: Create release with binary
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ github.ref_name }}
+          files: sprinkler_controller.bin
