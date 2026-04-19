@@ -82,7 +82,7 @@ const int RELAY_PINS[8] = {32, 33, 25, 26, 27, 14, 12, 13};
 #define AP_PASSWORD    "sprinkler123"
 #define NTP_SERVER     "pool.ntp.org"
 #define OTA_PASSWORD   "sprinkler123"  // Password for Arduino IDE OTA and web UI upload
-#define FW_VERSION     "1.0.0"
+#define FW_VERSION     "1.1.0"
 
 // Cloud update URLs — point these at your GitHub repo
 #define CLOUD_UI_URL  "https://raw.githubusercontent.com/John-High-Sierra/sprinkler.board/main/esp32_firmware/sprinkler_controller/data/index.html"
