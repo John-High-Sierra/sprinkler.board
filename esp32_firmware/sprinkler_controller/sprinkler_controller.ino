@@ -780,7 +780,36 @@ void setupCloudUpdateRoutes() {
 
   // ── POST /api/update/firmware — pull .bin from GitHub releases and flash ─
   server.on("/api/update/firmware", HTTP_POST, []() {
-    Serial.printf("[CLOUD] Downloading firmware from: %s\n", CLOUD_FW_URL);
+    Serial.printf("[CLOUD] Resolving redirects for: %s\n", CLOUD_FW_URL);
+
+    // Step 1 — follow redirect chain until we reach the real CDN URL
+    String finalUrl = CLOUD_FW_URL;
+    for (int hop = 0; hop < 5; hop++) {
+      WiFiClientSecure rc;
+      rc.setInsecure();
+      HTTPClient rh;
+      const char* hdrs[] = {"Location"};
+      rh.collectHeaders(hdrs, 1);
+      rh.setFollowRedirects(HTTPC_DISABLE_FOLLOW_REDIRECTS);
+      rh.addHeader("User-Agent", "ESP32-Sprinkler");
+      rh.begin(rc, finalUrl);
+      int code = rh.GET();
+      String loc = rh.header("Location");
+      rh.end();
+      Serial.printf("[CLOUD] Hop %d: code=%d  url=%s\n", hop + 1, code, finalUrl.c_str());
+      if ((code == 301 || code == 302 || code == 303 || code == 307) && !loc.isEmpty()) {
+        finalUrl = loc;
+      } else {
+        break; // reached final destination or error
+      }
+    }
+
+    Serial.printf("[CLOUD] Resolved URL: %s\n", finalUrl.c_str());
+
+    if (finalUrl == CLOUD_FW_URL) {
+      Serial.println("[CLOUD] Could not resolve redirect URL");
+      return;
+    }
 
     // Send response BEFORE flashing — board reboots and can't reply after
     server.send(200, "application/json",
@@ -789,13 +818,13 @@ void setupCloudUpdateRoutes() {
 
     allRelaysOff(); // Safety: kill all relays before flashing
 
+    // Step 2 — flash from real CDN URL
     WiFiClientSecure client;
     client.setInsecure();
-
     httpUpdate.setLedPin(STATUS_LED_PIN, HIGH);
     httpUpdate.rebootOnUpdate(true);
 
-    t_httpUpdate_return ret = httpUpdate.update(client, CLOUD_FW_URL);
+    t_httpUpdate_return ret = httpUpdate.update(client, finalUrl);
     // Only reached if update failed
     switch (ret) {
       case HTTP_UPDATE_FAILED:
