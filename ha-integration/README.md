@@ -24,6 +24,8 @@ switch:
     duration: 10          # Default run duration in minutes (optional, default: 10)
 ```
 
+> **Important:** Use a static IP or DHCP reservation for your SprinKlr-8 board. If the IP address changes, HA entities will become orphaned and need to be re-added.
+
 ## Entities
 
 Creates 8 switch entities: `switch.sprinklr_8_zone_1` through `switch.sprinklr_8_zone_8`
@@ -39,3 +41,7 @@ Creates 8 switch entities: `switch.sprinklr_8_zone_1` through `switch.sprinklr_8
 | GET | `/api/status` | Poll zone state |
 | POST | `/api/run_zone` | Activate zone (`{"zone": 0, "duration": 10}`) |
 | POST | `/api/stop_sequence` | Stop all zones |
+
+## Future improvements
+
+- Config flow (UI-based setup without editing `configuration.yaml`) — planned for a future release
