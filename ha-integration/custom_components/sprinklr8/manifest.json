@@ -1,0 +1,10 @@
+{
+  "domain": "sprinklr8",
+  "name": "SprinKlr-8 Sprinkler Controller",
+  "version": "1.0.0",
+  "documentation": "https://github.com/John-High-Sierra/sprinkler.board",
+  "requirements": [],
+  "dependencies": [],
+  "codeowners": ["@John-High-Sierra"],
+  "iot_class": "local_polling"
+}
