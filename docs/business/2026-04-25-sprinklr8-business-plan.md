@@ -16,7 +16,7 @@
 | **Channels** | Reddit, YouTube, TikTok |
 | **Price** | $49–59/unit (target $54) |
 | **Cost** | ~$36/unit (30 units), ~$26/unit (100 units), ~$21/unit (500 units) |
-| **Unfair Advantage** | Open source community, direct manufacturing, truly-local niche |
+| **Unfair Advantage** | Source-available community trust, direct manufacturing, truly-local niche |
 
 ---
 
@@ -80,7 +80,7 @@ Rachio is not actually a competitor for this customer — anyone comparing Sprin
 **Phase 1: Foundation (Months 1–2)**
 - Register LLC
 - Open business bank account
-- Open source firmware on GitHub under MIT license
+- Publish firmware source on GitHub under MIT + Commons Clause (source-available: free for personal/non-commercial use, commercial license required to sell competing products)
 - Write clean README with photos, wiring diagram, and buy link
 - Set up Tindie seller account
 - Order and validate 5-unit prototype batch

@@ -92,12 +92,14 @@
   > **Buy an assembled SprinKlr-8 board:** [Tindie listing coming soon]
   ```
 
-- [ ] **Step 2: Add MIT License**
+- [ ] **Step 2: Add MIT + Commons Clause License**
 
-  Create `LICENSE` in the project root:
+  Create `LICENSE` in the project root. This is a source-available license —
+  anyone can read, use, and modify the code for personal/non-commercial purposes,
+  but selling products built with this firmware requires a commercial license.
 
   ```
-  MIT License
+  MIT License with Commons Clause
 
   Copyright (c) 2026 [Your Name / LLC Name]
 
@@ -118,6 +120,23 @@
   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
   SOFTWARE.
+
+  Commons Clause License Condition v1.0
+
+  The Software is provided to you by the Licensor under the License, as defined
+  below, subject to the following condition.
+
+  Without limiting other conditions in the License, the grant of rights under
+  the License will not include, and the License does not grant to you, the right
+  to Sell the Software.
+
+  For purposes of the foregoing, "Sell" means practicing any or all of the rights
+  granted to you under the License to provide to third parties, for a fee or other
+  consideration (including without limitation fees for hosting or consulting/
+  support services related to the Software), a product or service whose value
+  derives, entirely or substantially, from the functionality of the Software.
+
+  For commercial licensing inquiries contact: [your business email]
   ```
 
 - [ ] **Step 3: Add CONTRIBUTING.md**
@@ -128,6 +147,12 @@
   # Contributing to SprinKlr-8
 
   Pull requests welcome. For major changes, open an issue first.
+
+  ## License
+  This project uses the MIT License with Commons Clause. Contributions are accepted
+  under the same terms. Personal and non-commercial use is free. Commercial use
+  (selling products built with this firmware) requires a separate commercial license
+  — contact [your business email].
 
   ## Development Setup
   1. Install Arduino IDE 2.x
