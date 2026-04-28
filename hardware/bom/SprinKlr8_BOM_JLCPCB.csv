@@ -1,26 +1,31 @@
-Comment,Designator,Footprint,LCSC Part #
-ESP32-WROOM-32E-N4,U1,Module-ESP32-WROOM-32,C701341
-CH340C,U2,SO-16,C84681
-ULN2803ADWR,U3,SO-18,C5840
-AMS1117-3.3,U4,SOT-223,C6186
-LM2596S-5.0,U5,TO-263-5,C347421
-MB10F,D10,SOP-4,C2491
-1N5819,D11,SOD-123,C191023
-SS14,D12,SOD-123,C2837435
-MMBT3904,"T1,T2",SOT-23,C20526
-HF46F-G/5-HS1,"K1,K2,K3,K4,K5,K6,K7,K8",Relay-HF46F-5,C165255
-USB-C 16P SMD,J1,USB-C-16P,C165948
-Terminal 5.08mm 3P,J2A,Terminal-5.08-3P,C2915640
-Terminal 5.08mm 8P,J2B,Terminal-5.08-8P,C5143711
-Fuse Holder 5x20mm,F1,Fuse-Holder-5x20,C3131
-100uH SMD Inductor,L1,Inductor-CYH127,C2929505
-470uF 50V SMD Aluminum Electrolytic,C1,CAP-SMD-10x10.5,C90272
-220uF 25V SMD Aluminum Electrolytic,C2,CAP-SMD-6.3x7.7,C4747974
-100nF,"C3,C4,C5,C6",0402,C1525
-1k,"R1,R2,R3,R4,R5,R6,R7,R8,R24",0402,C11702
-470R,"R9,R10,R11,R12,R13,R14,R15,R16",0402,C23190
-10k,"R17,R18,R19,R20,R21",0402,C25804
-5.1k,"R22,R23",0402,C27864
-LED Green,"D1,D2,D3,D4,D5,D6,D7,D8",0402,C72043
-LED Red,D9,0402,C84256
-Tactile Switch,"SW1,SW2",SW-SMD-4P,C318884
+Block,Comment,Designator,Footprint,LCSC Part #
+1. Power Supply (24VAC -> 5V -> 3.3V),Fuse Holder 5x20mm (1A slow-blow),F1,Fuse-Holder-5x20,C3131
+1. Power Supply (24VAC -> 5V -> 3.3V),"Terminal 5.08mm 3P (AC_L, AC_N, VALVE_COM)",J2A,Terminal-5.08-3P,C2915640
+1. Power Supply (24VAC -> 5V -> 3.3V),MB10F Bridge Rectifier,D10,SOP-4,C2491
+1. Power Supply (24VAC -> 5V -> 3.3V),470uF 50V SMD Aluminum Electrolytic,C1,CAP-SMD-10x10.5,C90272
+1. Power Supply (24VAC -> 5V -> 3.3V),LM2596S-5.0,U5,TO-263-5,C347421
+1. Power Supply (24VAC -> 5V -> 3.3V),100uH SMD Inductor,L1,Inductor-CYH127,C2929505
+1. Power Supply (24VAC -> 5V -> 3.3V),1N5819 Catch Diode,D11,SOD-123,C191023
+1. Power Supply (24VAC -> 5V -> 3.3V),220uF 25V SMD Aluminum Electrolytic,C2,CAP-SMD-6.3x7.7,C4747974
+1. Power Supply (24VAC -> 5V -> 3.3V),SS14 Schottky,D12,SOD-123,C2837435
+1. Power Supply (24VAC -> 5V -> 3.3V),AMS1117-3.3 LDO,U4,SOT-223,C6186
+1. Power Supply (24VAC -> 5V -> 3.3V),LED Red (power-on),D9,LED-0402,C84256
+1. Power Supply (24VAC -> 5V -> 3.3V),1k-ohm (power LED resistor),R24,0402,C11702
+2. MCU Core (ESP32 + strapping),ESP32-WROOM-32E-N4,U1,Module-ESP32-WROOM-32,C701341
+2. MCU Core (ESP32 + strapping),100nF 0402 MLCC (decoupling),"C3,C4,C5,C6",0402,C1525
+2. MCU Core (ESP32 + strapping),10k-ohm (EN pull-up),R19,0402,C25804
+2. MCU Core (ESP32 + strapping),10k-ohm (BOOT/GPIO0 pull-up),R20,0402,C25804
+2. MCU Core (ESP32 + strapping),10k-ohm (GPIO12 strap pull-down),R21,0402,C25804
+2. MCU Core (ESP32 + strapping),Tactile Switch 3x4mm SMD,"SW1,SW2",SW-SMD-4P,C318884
+"3. USB / Programming (USB-C, CH340C, auto-reset)",USB-C 16-pin SMD,J1,USB-C-16P,C165948
+"3. USB / Programming (USB-C, CH340C, auto-reset)",5.1k-ohm (USB-C CC1/CC2),"R22,R23",0402,C27864
+"3. USB / Programming (USB-C, CH340C, auto-reset)",CH340C USB-UART,U2,SO-16,C84681
+"3. USB / Programming (USB-C, CH340C, auto-reset)",MMBT3904 NPN (auto-reset),"T1,T2",SOT-23,C20526
+"3. USB / Programming (USB-C, CH340C, auto-reset)",10k-ohm (DTR base resistor),R17,0402,C25804
+"3. USB / Programming (USB-C, CH340C, auto-reset)",10k-ohm (RTS base resistor),R18,0402,C25804
+4. Zone Driver (GPIO -> ULN2803 -> relays -> outputs),ULN2803ADWR Darlington Array,U3,SO-18,C5840
+4. Zone Driver (GPIO -> ULN2803 -> relays -> outputs),1k-ohm (GPIO -> ULN2803 input),"R1,R2,R3,R4,R5,R6,R7,R8",0402,C11702
+4. Zone Driver (GPIO -> ULN2803 -> relays -> outputs),HF46F-G/5-HS1 5V SPST-NO Relay,"K1,K2,K3,K4,K5,K6,K7,K8",Relay-HF46F-5,C165255
+4. Zone Driver (GPIO -> ULN2803 -> relays -> outputs),Terminal 5.08mm 8P (ZONE1-ZONE8),J2B,Terminal-5.08-8P,C5143711
+5. Status Indication (LEDs),LED Green (zone active),"D1,D2,D3,D4,D5,D6,D7,D8",LED-0402,C72043
+5. Status Indication (LEDs),470-ohm (zone LED resistor),"R9,R10,R11,R12,R13,R14,R15,R16",0402,C23190
