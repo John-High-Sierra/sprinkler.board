@@ -7,7 +7,7 @@ Block,Comment,Designator,Footprint,LCSC Part #
 1. Power Supply (24VAC -> 5V -> 3.3V),100uH SMD Inductor,L1,Inductor-CYH127,C2929505
 1. Power Supply (24VAC -> 5V -> 3.3V),1N5819 Catch Diode,D11,SOD-123,C191023
 1. Power Supply (24VAC -> 5V -> 3.3V),220uF 25V SMD Aluminum Electrolytic,C2,CAP-SMD-6.3x7.7,C2992606
-1. Power Supply (24VAC -> 5V -> 3.3V),SS14 Schottky,D12,SOD-123,C2837435
+1. Power Supply (24VAC -> 5V -> 3.3V),SS14 Schottky,D12,SMA,C2480
 1. Power Supply (24VAC -> 5V -> 3.3V),AMS1117-3.3 LDO,U4,SOT-223,C6186
 1. Power Supply (24VAC -> 5V -> 3.3V),LED Red (power-on),D9,LED-0402,C84256
 1. Power Supply (24VAC -> 5V -> 3.3V),1k-ohm (power LED resistor),R24,402,C11702
