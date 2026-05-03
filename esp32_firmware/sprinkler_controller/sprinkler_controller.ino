@@ -39,6 +39,7 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include <WiFiManager.h>
+#include <ESPmDNS.h>
 #include <WebServer.h>
 #include <ArduinoOTA.h>
 #include <Update.h>
@@ -47,8 +48,6 @@
 #include <WiFiClientSecure.h>
 #include <LittleFS.h>
 #include <ArduinoJson.h>
-#include <NTPClient.h>
-#include <WiFiUdp.h>
 #include <time.h>
 
 // ═══════════════════════════════════════════════════════════════
@@ -87,8 +86,8 @@ const int RELAY_PINS[8] = {32, 33, 25, 26, 27, 14, 12, 13};
 // Cloud update URLs — point these at your GitHub repo
 #define CLOUD_UI_URL  "https://raw.githubusercontent.com/John-High-Sierra/sprinkler.board/main/esp32_firmware/sprinkler_controller/data/index.html"
 #define CLOUD_FW_URL  "https://github.com/John-High-Sierra/sprinkler.board/releases/latest/download/sprinkler_controller.bin"
-#define TZ_OFFSET_SEC  -18000   // UTC-5 (EST). Change for your timezone.
-                                // UTC-6 = -21600, UTC-7 = -25200, UTC-8 = -28800
+#define CONFIG_FILE    "/config.json"
+#define DEFAULT_TZ     "UTC0"   // Overridden by config.json saved via Settings page
 
 // ═══════════════════════════════════════════════════════════════
 //  RELAY HELPER MACROS
@@ -135,8 +134,22 @@ SemaphoreHandle_t scheduleMutex;
 volatile bool     stopRequested = false;
 
 WebServer         server(80);
-WiFiUDP           ntpUDP;
-NTPClient         timeClient(ntpUDP, NTP_SERVER, TZ_OFFSET_SEC, 60000);
+
+// ── Board config (timezone, etc.) persisted in config.json ──
+struct BoardConfig {
+  char timezone[64];
+};
+BoardConfig boardConfig;
+
+// ── NTP sync helper ──────────────────────────────────────────
+bool isNtpSynced() {
+  return time(nullptr) > 1700000000UL; // valid if past Nov 2023
+}
+
+void applyTimezone() {
+  setenv("TZ", boardConfig.timezone, 1);
+  tzset();
+}
 
 int lastScheduledDay = -1;
 int lastScheduledMinute = -1;
@@ -203,13 +216,13 @@ bool loadSchedule() {
 
   for (int d = 0; d < 7 && d < (int)days.size(); d++) {
     JsonObject day = days[d];
-    schedule.days[d].isActive = day["is_active"] | false;
-    schedule.days[d].hour     = day["hour"]      | 7;
-    schedule.days[d].minute   = day["minute"]    | 0;
+    schedule.days[d].isActive = day["is_active"].as<bool>();
+    schedule.days[d].hour   = day.containsKey("hour")   ? (int)day["hour"]   : 7;
+    schedule.days[d].minute = day.containsKey("minute") ? (int)day["minute"] : 0;
 
     JsonArray durs = day["durations"].as<JsonArray>();
     for (int z = 0; z < NUM_ZONES && z < (int)durs.size(); z++) {
-      schedule.days[d].durations[z] = durs[z] | 10;
+      schedule.days[d].durations[z] = (int)durs[z];
     }
     // Fill remaining zones if fewer were saved
     for (int z = durs.size(); z < NUM_ZONES; z++) {
@@ -250,6 +263,33 @@ bool saveSchedule() {
   f.close();
   Serial.println("[SCHED] Schedule saved OK");
   return true;
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  BOARD CONFIG PERSISTENCE (timezone, etc.)
+// ═══════════════════════════════════════════════════════════════
+void loadConfig() {
+  strlcpy(boardConfig.timezone, DEFAULT_TZ, sizeof(boardConfig.timezone));
+  if (!LittleFS.exists(CONFIG_FILE)) return;
+  File f = LittleFS.open(CONFIG_FILE, "r");
+  if (!f) return;
+  DynamicJsonDocument doc(256);
+  if (deserializeJson(doc, f) == DeserializationError::Ok) {
+    const char* tz = doc["timezone"];
+    if (tz) strlcpy(boardConfig.timezone, tz, sizeof(boardConfig.timezone));
+  }
+  f.close();
+  Serial.printf("[CFG] Timezone: %s\n", boardConfig.timezone);
+}
+
+void saveConfig() {
+  DynamicJsonDocument doc(256);
+  doc["timezone"] = boardConfig.timezone;
+  File f = LittleFS.open(CONFIG_FILE, "w");
+  if (!f) return;
+  serializeJson(doc, f);
+  f.close();
+  Serial.printf("[CFG] Config saved: tz=%s\n", boardConfig.timezone);
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -350,10 +390,7 @@ void scheduleCheckerTask(void* param) {
   while (true) {
     vTaskDelay(pdMS_TO_TICKS(15000)); // Check every 15 seconds
 
-    if (!timeClient.isTimeSet()) {
-      timeClient.update();
-      continue;
-    }
+    if (!isNtpSynced()) continue;
 
     xSemaphoreTake(scheduleMutex, portMAX_DELAY);
     bool enabled = schedule.enabled;
@@ -361,7 +398,7 @@ void scheduleCheckerTask(void* param) {
 
     if (!enabled) continue;
 
-    time_t now = timeClient.getEpochTime();
+    time_t now = time(nullptr);
     struct tm* t = localtime(&now);
 
     // tm_wday: 0=Sunday, 1=Monday...6=Saturday
@@ -429,7 +466,7 @@ String buildScheduleJson() {
 
 String buildSystemInfoJson() {
   DynamicJsonDocument doc(512);
-  time_t now = timeClient.getEpochTime();
+  time_t now = time(nullptr);
   struct tm* t = localtime(&now);
   char timeBuf[32];
   strftime(timeBuf, sizeof(timeBuf), "%Y-%m-%d %H:%M:%S", t);
@@ -439,7 +476,8 @@ String buildSystemInfoJson() {
   doc["ip_address"]        = WiFi.localIP().toString();
   doc["hostname"]          = HOSTNAME;
   doc["num_zones"]         = NUM_ZONES;
-  doc["ntp_synced"]        = timeClient.isTimeSet();
+  doc["ntp_synced"]        = isNtpSynced();
+  doc["timezone"]          = boardConfig.timezone;
   doc["uptime_sec"]        = millis() / 1000;
   doc["free_heap"]         = ESP.getFreeHeap();
 
@@ -505,12 +543,13 @@ void setupRoutes() {
     xSemaphoreTake(scheduleMutex, portMAX_DELAY);
     for (int d = 0; d < 7; d++) {
       JsonObject day = arr[d];
-      schedule.days[d].isActive = day["is_active"] | false;
-      schedule.days[d].hour     = day["hour"]      | 7;
-      schedule.days[d].minute   = day["minute"]    | 0;
+      schedule.days[d].isActive = day["is_active"].as<bool>();
+      // Use explicit containsKey checks so hour=0 (midnight) is handled correctly
+      schedule.days[d].hour   = day.containsKey("hour")   ? (int)day["hour"]   : 7;
+      schedule.days[d].minute = day.containsKey("minute") ? (int)day["minute"] : 0;
       JsonArray durs = day["durations"].as<JsonArray>();
       for (int z = 0; z < NUM_ZONES && z < (int)durs.size(); z++) {
-        schedule.days[d].durations[z] = durs[z] | 0;
+        schedule.days[d].durations[z] = (int)durs[z];
       }
     }
     xSemaphoreGive(scheduleMutex);
@@ -634,14 +673,38 @@ void setupRoutes() {
 
   // ── GET /api/get_time ─────────────────────────────────────────
   server.on("/api/get_time", HTTP_GET, []() {
-    timeClient.update();
-    time_t now = timeClient.getEpochTime();
+    time_t now = time(nullptr);
     struct tm* t = localtime(&now);
     char buf[32];
     strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", t);
     String resp = "{\"time\":\"" + String(buf) + "\",\"ntp_synced\":" +
-                  String(timeClient.isTimeSet() ? "true" : "false") + "}";
+                  String(isNtpSynced() ? "true" : "false") + "}";
     server.send(200, "application/json", resp);
+  });
+
+  // ── GET /api/config ───────────────────────────────────────────
+  server.on("/api/config", HTTP_GET, []() {
+    DynamicJsonDocument doc(256);
+    doc["timezone"] = boardConfig.timezone;
+    String out; serializeJson(doc, out);
+    server.send(200, "application/json", out);
+  });
+
+  // ── POST /api/config  body: {"timezone":"EST5EDT,M3.2.0,M11.1.0"} ──
+  server.on("/api/config", HTTP_POST, []() {
+    if (!server.hasArg("plain")) { server.send(400, "application/json", "{\"error\":\"No body\"}"); return; }
+    DynamicJsonDocument doc(256);
+    if (deserializeJson(doc, server.arg("plain")) != DeserializationError::Ok) {
+      server.send(400, "application/json", "{\"error\":\"Invalid JSON\"}"); return;
+    }
+    const char* tz = doc["timezone"];
+    if (!tz || strlen(tz) == 0 || strlen(tz) >= sizeof(boardConfig.timezone)) {
+      server.send(400, "application/json", "{\"error\":\"Invalid timezone\"}"); return;
+    }
+    strlcpy(boardConfig.timezone, tz, sizeof(boardConfig.timezone));
+    applyTimezone();
+    saveConfig();
+    server.send(200, "application/json", "{\"message\":\"Config saved\"}");
   });
 
   // ── GET /api/system_info ──────────────────────────────────────
@@ -991,6 +1054,10 @@ void setupWiFi() {
 
   if (connected) {
     Serial.printf("[WIFI] Connected: %s\n", WiFi.localIP().toString().c_str());
+    if (MDNS.begin(HOSTNAME)) {
+      MDNS.addService("http", "tcp", 80);
+      Serial.printf("[MDNS] Reachable at http://%s.local\n", HOSTNAME);
+    }
   } else {
     Serial.println("[WIFI] Portal timed out, running in offline mode");
   }
@@ -1050,16 +1117,27 @@ void setup() {
   }
   Serial.println("[BOOT] LittleFS OK");
 
-  // Load schedule
+  // Load schedule and board config
   loadSchedule();
+  loadConfig();
 
   // WiFi
   setupWiFi();
 
-  // NTP
-  timeClient.begin();
-  timeClient.update();
-  Serial.printf("[BOOT] NTP time: %s\n", timeClient.getFormattedTime().c_str());
+  // NTP — use ESP32 built-in SNTP (handles DST automatically via POSIX tz string)
+  applyTimezone();
+  configTime(0, 0, NTP_SERVER);   // always fetch UTC; localtime() applies the TZ offset
+  Serial.println("[BOOT] Waiting for NTP sync...");
+  {
+    int retries = 0;
+    while (!isNtpSynced() && retries++ < 20) { delay(500); }
+  }
+  if (isNtpSynced()) {
+    time_t now = time(nullptr);
+    Serial.printf("[BOOT] NTP synced: %s", ctime(&now));
+  } else {
+    Serial.println("[BOOT] NTP sync timed out — will retry in background");
+  }
 
   // OTA firmware updates (Arduino IDE over WiFi)
   setupOTA();
@@ -1081,15 +1159,10 @@ void setup() {
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  LOOP (just NTP keepalive — real work is in tasks/async server)
+//  LOOP (real work is in FreeRTOS tasks and web server callbacks)
 // ═══════════════════════════════════════════════════════════════
 void loop() {
   ArduinoOTA.handle();
   server.handleClient();
-  static unsigned long lastNTP = 0;
-  if (millis() - lastNTP > 300000) { // Resync every 5 min
-    timeClient.update();
-    lastNTP = millis();
-  }
   delay(10);
 }

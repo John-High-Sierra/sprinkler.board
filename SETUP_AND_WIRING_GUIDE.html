@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>SprinKlr-8 Setup & Wiring Guide</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap');
+
+/* ── Reset ─────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* ── Page / Print ───────────────────────────────────── */
+html { font-size: 11pt; }
+body { font-family: 'Inter', system-ui, sans-serif; color: #1a2030; background: #fff; line-height: 1.6; }
+
+@page { size: A4; margin: 18mm 20mm 18mm 20mm; }
+@media print {
+  .page-break { page-break-before: always; }
+  .no-break    { page-break-inside: avoid; }
+  body         { font-size: 10pt; }
+}
+
+/* ── Cover ──────────────────────────────────────────── */
+.cover {
+  min-height: 100vh;
+  display: flex; flex-direction: column; justify-content: center; align-items: flex-start;
+  padding: 60px 60px;
+  background: linear-gradient(160deg, #0d1b2a 0%, #1a3a5c 100%);
+  color: #fff;
+}
+.cover-tag  { font-size: 0.75rem; letter-spacing: 3px; text-transform: uppercase; color: #4fc3f7; margin-bottom: 24px; }
+.cover h1   { font-size: 3.2rem; font-weight: 700; line-height: 1.1; margin-bottom: 16px; }
+.cover h1 span { color: #4fc3f7; }
+.cover-sub  { font-size: 1.1rem; color: #90caf9; max-width: 480px; margin-bottom: 48px; }
+.cover-line { width: 60px; height: 4px; background: #4fc3f7; border-radius: 2px; margin-bottom: 48px; }
+.cover-meta { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; max-width: 440px; }
+.cover-meta-item label { font-size: 0.7rem; letter-spacing: 2px; text-transform: uppercase; color: #607080; display: block; margin-bottom: 4px; }
+.cover-meta-item span  { font-size: 0.95rem; color: #e0e8f0; font-weight: 500; }
+
+/* ── TOC ────────────────────────────────────────────── */
+.toc { padding: 48px 0; }
+.toc h2 { font-size: 0.75rem; letter-spacing: 3px; text-transform: uppercase; color: #4fc3f7; margin-bottom: 28px; }
+.toc-item { display: flex; justify-content: space-between; align-items: baseline; padding: 10px 0; border-bottom: 1px dotted #d0dae8; }
+.toc-item:last-child { border-bottom: none; }
+.toc-num  { font-size: 0.75rem; color: #90a0b0; margin-right: 14px; font-weight: 600; min-width: 24px; }
+.toc-title { font-size: 1rem; font-weight: 500; color: #1a2030; }
+.toc-pg   { font-size: 0.8rem; color: #90a0b0; }
+
+/* ── Content pages ──────────────────────────────────── */
+.content { max-width: 720px; margin: 0 auto; padding: 0 0 48px; }
+
+/* ── Section headers ────────────────────────────────── */
+.section-label { font-size: 0.7rem; letter-spacing: 3px; text-transform: uppercase; color: #4fc3f7; margin-bottom: 8px; margin-top: 48px; }
+h2 { font-size: 1.7rem; font-weight: 700; color: #0d1b2a; margin-bottom: 6px; }
+.section-rule { height: 3px; background: linear-gradient(90deg, #4fc3f7, transparent); border-radius: 2px; margin-bottom: 28px; }
+h3 { font-size: 1.05rem; font-weight: 700; color: #1a3a5c; margin: 24px 0 10px; }
+p  { margin-bottom: 12px; color: #2a3545; }
+
+/* ── Steps ──────────────────────────────────────────── */
+.steps { counter-reset: step; list-style: none; margin: 0 0 24px; }
+.steps li {
+  counter-increment: step;
+  display: flex; gap: 16px; align-items: flex-start;
+  margin-bottom: 14px;
+  padding: 14px 16px;
+  background: #f4f7fb;
+  border-radius: 10px;
+  border-left: 4px solid #4fc3f7;
+}
+.steps li::before {
+  content: counter(step);
+  min-width: 26px; height: 26px;
+  background: #4fc3f7; color: #fff;
+  border-radius: 50%;
+  font-size: 0.8rem; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; margin-top: 1px;
+}
+.steps li .step-text { font-size: 0.95rem; color: #1a2030; }
+.steps li .step-text strong { color: #0d1b2a; }
+.steps li .step-note { font-size: 0.82rem; color: #607080; margin-top: 4px; }
+
+/* ── Code / values ──────────────────────────────────── */
+code { font-family: 'JetBrains Mono', monospace; font-size: 0.88em; background: #e8f0f8; color: #1a3a5c; padding: 2px 6px; border-radius: 4px; }
+.code-block { font-family: 'JetBrains Mono', monospace; font-size: 0.85rem; background: #0d1b2a; color: #a8d8f0; padding: 16px 20px; border-radius: 10px; margin: 14px 0; line-height: 1.7; white-space: pre; overflow-x: auto; }
+.code-block .dim { color: #4a6070; }
+.code-block .hi  { color: #4fc3f7; font-weight: 600; }
+
+/* ── Callouts ───────────────────────────────────────── */
+.callout { display: flex; gap: 14px; padding: 14px 16px; border-radius: 10px; margin: 18px 0; }
+.callout.tip    { background: #e8f8f0; border-left: 4px solid #4caf50; }
+.callout.warn   { background: #fff8e8; border-left: 4px solid #f0a500; }
+.callout.danger { background: #fdecea; border-left: 4px solid #e53935; }
+.callout-icon { font-size: 1.1rem; flex-shrink: 0; margin-top: 1px; }
+.callout-body { font-size: 0.92rem; color: #2a3545; line-height: 1.55; }
+.callout-body strong { display: block; margin-bottom: 3px; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.5px; }
+.callout.tip    .callout-body strong { color: #2e7d32; }
+.callout.warn   .callout-body strong { color: #e65100; }
+.callout.danger .callout-body strong { color: #c62828; }
+
+/* ── Diagrams ───────────────────────────────────────── */
+.diagram-wrap { margin: 24px 0; text-align: center; }
+.diagram-wrap svg { max-width: 100%; height: auto; }
+.diagram-caption { font-size: 0.8rem; color: #607080; margin-top: 10px; font-style: italic; }
+
+/* ── Tables ─────────────────────────────────────────── */
+table { width: 100%; border-collapse: collapse; margin: 18px 0; font-size: 0.92rem; }
+th { background: #0d1b2a; color: #4fc3f7; padding: 10px 14px; text-align: left; font-size: 0.78rem; letter-spacing: 1px; text-transform: uppercase; }
+td { padding: 10px 14px; border-bottom: 1px solid #e0e8f4; }
+tr:nth-child(even) td { background: #f4f7fb; }
+td code { background: #e0eaf6; }
+
+/* ── Pin badge ──────────────────────────────────────── */
+.pin { display: inline-block; font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; font-weight: 600; background: #1a3a5c; color: #4fc3f7; padding: 2px 8px; border-radius: 4px; }
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════════════════
+     COVER
+════════════════════════════════════════════════════════ -->
+<div class="cover">
+  <div class="cover-tag">Installation &amp; Operation Manual</div>
+  <h1>SprinKlr<span>-8</span><br>Sprinkler Controller</h1>
+  <p class="cover-sub">8-zone WiFi sprinkler controller based on the ESP32 platform. Supports automatic scheduling, manual zone control, and over-the-air updates.</p>
+  <div class="cover-line"></div>
+  <div class="cover-meta">
+    <div class="cover-meta-item"><label>Hardware</label><span>ACEIRMC ESP32-WROOM-32E</span></div>
+    <div class="cover-meta-item"><label>Zones</label><span>8 (24VAC)</span></div>
+    <div class="cover-meta-item"><label>Firmware</label><span>v1.1.0</span></div>
+    <div class="cover-meta-item"><label>Voltage</label><span>24VAC / 120–240VAC input</span></div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     TABLE OF CONTENTS
+════════════════════════════════════════════════════════ -->
+<div class="content page-break">
+  <div class="toc">
+    <h2>Contents</h2>
+    <div class="toc-item"><span><span class="toc-num">1</span><span class="toc-title">What's in the Box</span></span></div>
+    <div class="toc-item"><span><span class="toc-num">2</span><span class="toc-title">Wiring to a 24VAC Sprinkler System</span></span></div>
+    <div class="toc-item"><span><span class="toc-num">3</span><span class="toc-title">Loading Firmware for the First Time</span></span></div>
+    <div class="toc-item"><span><span class="toc-num">4</span><span class="toc-title">First Boot &amp; WiFi Setup</span></span></div>
+    <div class="toc-item"><span><span class="toc-num">5</span><span class="toc-title">Using the Web Interface</span></span></div>
+    <div class="toc-item"><span><span class="toc-num">6</span><span class="toc-title">Switching to a Different WiFi Network</span></span></div>
+    <div class="toc-item"><span><span class="toc-num">7</span><span class="toc-title">Over-the-Air Updates</span></span></div>
+    <div class="toc-item"><span><span class="toc-num">8</span><span class="toc-title">Troubleshooting</span></span></div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     SECTION 1 — WHAT'S IN THE BOX
+════════════════════════════════════════════════════════ -->
+<div class="content page-break">
+  <div class="section-label">Section 1</div>
+  <h2>What's in the Box</h2>
+  <div class="section-rule"></div>
+
+  <table>
+    <tr><th>Item</th><th>Notes</th></tr>
+    <tr><td>SprinKlr-8 relay board</td><td>ESP32-WROOM-32E + 8-channel relay</td></tr>
+    <tr><td>CP2102 USB serial adapter</td><td>Required for initial firmware load only</td></tr>
+    <tr><td>24VAC transformer</td><td>24V AC, 1A minimum — not included if reusing existing</td></tr>
+  </table>
+
+  <div class="callout warn">
+    <div class="callout-icon">⚠️</div>
+    <div class="callout-body"><strong>Before You Start</strong>The board operates on 24VAC for the sprinkler valves and requires mains power for the onboard AC/DC converter. Turn off mains power at the breaker before wiring.</div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     SECTION 2 — WIRING
+════════════════════════════════════════════════════════ -->
+<div class="content page-break">
+  <div class="section-label">Section 2</div>
+  <h2>Wiring to a 24VAC Sprinkler System</h2>
+  <div class="section-rule"></div>
+
+  <h3>How a 24VAC System Works</h3>
+  <p>Each zone valve is a solenoid that opens when 24VAC is applied across it. The controller completes the circuit for one zone at a time. All valves share a <strong>Common</strong> wire — one side of the 24VAC supply. The controller switches the other side (the hot leg) to each zone individually.</p>
+
+  <!-- Wiring Diagram -->
+  <div class="diagram-wrap no-break">
+    <svg viewBox="0 0 680 420" xmlns="http://www.w3.org/2000/svg" style="max-width:680px">
+      <defs>
+        <marker id="arr" markerWidth="8" markerHeight="6" refX="6" refY="3" orient="auto">
+          <polygon points="0 0, 8 3, 0 6" fill="#4fc3f7"/>
+        </marker>
+        <marker id="arr-r" markerWidth="8" markerHeight="6" refX="6" refY="3" orient="auto">
+          <polygon points="0 0, 8 3, 0 6" fill="#ef5350"/>
+        </marker>
+        <marker id="arr-g" markerWidth="8" markerHeight="6" refX="6" refY="3" orient="auto">
+          <polygon points="0 0, 8 3, 0 6" fill="#66bb6a"/>
+        </marker>
+      </defs>
+
+      <!-- Background -->
+      <rect width="680" height="420" fill="#f4f7fb" rx="12"/>
+
+      <!-- TRANSFORMER box -->
+      <rect x="30" y="140" width="120" height="100" fill="#0d1b2a" rx="8"/>
+      <text x="90" y="178" text-anchor="middle" fill="#4fc3f7" font-family="Inter,sans-serif" font-size="12" font-weight="700">24VAC</text>
+      <text x="90" y="196" text-anchor="middle" fill="#90caf9" font-family="Inter,sans-serif" font-size="11">Transformer</text>
+      <text x="90" y="214" text-anchor="middle" fill="#607080" font-family="Inter,sans-serif" font-size="10">120/240VAC in</text>
+      <!-- Terminals -->
+      <circle cx="30" cy="170" r="5" fill="#ef5350"/>
+      <text x="18" y="167" text-anchor="middle" fill="#ef5350" font-family="JetBrains Mono,monospace" font-size="9">HOT</text>
+      <circle cx="30" cy="210" r="5" fill="#66bb6a"/>
+      <text x="18" y="207" text-anchor="middle" fill="#66bb6a" font-family="JetBrains Mono,monospace" font-size="9">COM</text>
+
+      <!-- RELAY BOARD box -->
+      <rect x="250" y="80" width="180" height="240" fill="#0d1b2a" rx="8"/>
+      <text x="340" y="106" text-anchor="middle" fill="#4fc3f7" font-family="Inter,sans-serif" font-size="12" font-weight="700">SprinKlr-8</text>
+      <text x="340" y="122" text-anchor="middle" fill="#90caf9" font-family="Inter,sans-serif" font-size="10">Relay Board</text>
+
+      <!-- Relay COM input terminal -->
+      <circle cx="250" cy="155" r="5" fill="#ef5350"/>
+      <text x="238" y="152" text-anchor="middle" fill="#ef5350" font-family="JetBrains Mono,monospace" font-size="9">HOT</text>
+
+      <!-- Relay NO outputs -->
+      <circle cx="430" cy="155" r="5" fill="#fff"/>
+      <text x="444" y="152" fill="#e0e8f0" font-family="JetBrains Mono,monospace" font-size="9">Z1</text>
+      <circle cx="430" cy="185" r="5" fill="#fff"/>
+      <text x="444" y="182" fill="#e0e8f0" font-family="JetBrains Mono,monospace" font-size="9">Z2</text>
+      <circle cx="430" cy="215" r="5" fill="#fff"/>
+      <text x="444" y="212" fill="#e0e8f0" font-family="JetBrains Mono,monospace" font-size="9">Z3</text>
+
+      <!-- Dotted more zones -->
+      <text x="430" y="242" text-anchor="middle" fill="#607080" font-family="Inter,sans-serif" font-size="16">⋮</text>
+      <circle cx="430" cy="270" r="5" fill="#fff"/>
+      <text x="444" y="267" fill="#e0e8f0" font-family="JetBrains Mono,monospace" font-size="9">Z8</text>
+
+      <!-- COM in terminal (bottom) -->
+      <circle cx="250" cy="300" r="5" fill="#66bb6a"/>
+      <text x="236" y="297" text-anchor="middle" fill="#66bb6a" font-family="JetBrains Mono,monospace" font-size="9">COM</text>
+
+      <!-- ZONE VALVES -->
+      <!-- Valve 1 -->
+      <rect x="530" y="120" width="120" height="54" fill="#1a3a5c" rx="8"/>
+      <text x="590" y="143" text-anchor="middle" fill="#e0e8f0" font-family="Inter,sans-serif" font-size="11" font-weight="600">Zone 1 Valve</text>
+      <text x="590" y="160" text-anchor="middle" fill="#90caf9" font-family="Inter,sans-serif" font-size="10">24VAC solenoid</text>
+      <circle cx="530" cy="147" r="4" fill="#4fc3f7"/>
+      <circle cx="650" cy="147" r="4" fill="#66bb6a"/>
+
+      <!-- Valve 2 -->
+      <rect x="530" y="200" width="120" height="54" fill="#1a3a5c" rx="8"/>
+      <text x="590" y="223" text-anchor="middle" fill="#e0e8f0" font-family="Inter,sans-serif" font-size="11" font-weight="600">Zone 2 Valve</text>
+      <text x="590" y="240" text-anchor="middle" fill="#90caf9" font-family="Inter,sans-serif" font-size="10">24VAC solenoid</text>
+      <circle cx="530" cy="227" r="4" fill="#4fc3f7"/>
+      <circle cx="650" cy="227" r="4" fill="#66bb6a"/>
+
+      <!-- More valves indicator -->
+      <text x="590" y="295" text-anchor="middle" fill="#607080" font-family="Inter,sans-serif" font-size="13">⋮</text>
+      <text x="590" y="315" text-anchor="middle" fill="#607080" font-family="Inter,sans-serif" font-size="10">Zones 3–8</text>
+
+      <!-- WIRES -->
+      <!-- HOT: Transformer → Relay board -->
+      <line x1="35" y1="170" x2="244" y2="155" stroke="#ef5350" stroke-width="2" marker-end="url(#arr-r)"/>
+
+      <!-- Zone 1 wire: Relay Z1 → Valve 1 -->
+      <line x1="436" y1="155" x2="524" y2="147" stroke="#4fc3f7" stroke-width="2" marker-end="url(#arr)"/>
+
+      <!-- Zone 2 wire: Relay Z2 → Valve 2 -->
+      <line x1="436" y1="185" x2="524" y2="227" stroke="#4fc3f7" stroke-width="2" marker-end="url(#arr)"/>
+
+      <!-- Common bus: right side (valve common → bottom right → board COM) -->
+      <line x1="650" y1="147" x2="660" y2="147" stroke="#66bb6a" stroke-width="2"/>
+      <line x1="650" y1="227" x2="660" y2="227" stroke="#66bb6a" stroke-width="2"/>
+      <line x1="660" y1="147" x2="660" y2="350" stroke="#66bb6a" stroke-width="2"/>
+      <line x1="660" y1="350" x2="256" y2="350" stroke="#66bb6a" stroke-width="2"/>
+      <line x1="256" y1="350" x2="250" y2="305" stroke="#66bb6a" stroke-width="2" marker-end="url(#arr-g)"/>
+      <!-- Transformer COM to relay COM -->
+      <line x1="35" y1="210" x2="35" y2="380" stroke="#66bb6a" stroke-width="2"/>
+      <line x1="35" y1="380" x2="660" y2="380" stroke="#66bb6a" stroke-width="1.5" stroke-dasharray="6,4"/>
+
+      <!-- Labels -->
+      <rect x="80" y="340" width="100" height="20" fill="#fff" rx="4"/>
+      <text x="130" y="354" text-anchor="middle" fill="#66bb6a" font-family="Inter,sans-serif" font-size="10" font-weight="600">Common (shared)</text>
+      <rect x="156" y="130" width="80" height="18" fill="#fff" rx="4"/>
+      <text x="196" y="143" text-anchor="middle" fill="#ef5350" font-family="Inter,sans-serif" font-size="10" font-weight="600">Hot leg</text>
+      <rect x="456" y="128" width="60" height="18" fill="#fff" rx="4"/>
+      <text x="486" y="141" text-anchor="middle" fill="#4fc3f7" font-family="Inter,sans-serif" font-size="10" font-weight="600">Zone wires</text>
+    </svg>
+    <div class="diagram-caption">Figure 1 — 24VAC sprinkler system wiring. The Common wire (green) is shared by all valves and connects back to the transformer.</div>
+  </div>
+
+  <h3>Wiring Steps</h3>
+  <div class="callout danger">
+    <div class="callout-icon">🔴</div>
+    <div class="callout-body"><strong>Turn off power at the breaker before wiring</strong>The board uses mains voltage internally. All wiring must be done with power off.</div>
+  </div>
+
+  <ol class="steps">
+    <li>
+      <div class="step-text"><strong>Identify your wires.</strong> At the old controller you will find a bundle of low-voltage wires. There will be one <strong>Common</strong> wire (usually white, labelled C or COM) and one wire per zone (usually coloured, labelled 1–8).</div>
+    </li>
+    <li>
+      <div class="step-text"><strong>Connect the Common wire</strong> to the <strong>COM</strong> terminal on the SprinKlr-8 board.</div>
+    </li>
+    <li>
+      <div class="step-text"><strong>Connect each zone wire</strong> to the matching relay terminal — Zone 1 wire to Z1, Zone 2 wire to Z2, and so on.</div>
+      <div class="step-note">If you have fewer than 8 zones, leave the unused relay terminals empty.</div>
+    </li>
+    <li>
+      <div class="step-text"><strong>Connect the 24VAC transformer.</strong> One leg of the transformer connects to the board's HOT input terminal. The other leg connects to the Common wire (or joins it at the valve end).</div>
+      <div class="step-note">If you are reusing an existing transformer from the old controller, the wiring is usually already in place — you only need to move the zone and common wires.</div>
+    </li>
+    <li>
+      <div class="step-text"><strong>Connect mains power</strong> (120 or 240VAC) to the L, N, and GND terminals on the board's onboard power supply. Restore power at the breaker.</div>
+    </li>
+  </ol>
+
+  <div class="callout tip">
+    <div class="callout-icon">💡</div>
+    <div class="callout-body"><strong>Tip — Test before closing up</strong>Use the Manual page in the web interface to activate each zone one at a time and confirm the correct valve opens before sealing the enclosure.</div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     SECTION 3 — LOADING FIRMWARE
+════════════════════════════════════════════════════════ -->
+<div class="content page-break">
+  <div class="section-label">Section 3</div>
+  <h2>Loading Firmware for the First Time</h2>
+  <div class="section-rule"></div>
+
+  <p>The board has no built-in USB port. Firmware is loaded once using a <strong>CP2102 USB-to-serial adapter</strong>. After the initial load, all future updates can be done wirelessly (see Section 7).</p>
+
+  <h3>What You Need</h3>
+  <table>
+    <tr><th>Item</th><th></th></tr>
+    <tr><td>CP2102 USB serial adapter</td><td>Any CP2102 or CH340 adapter will work</td></tr>
+    <tr><td>Arduino IDE 2.x</td><td>Free download from arduino.cc</td></tr>
+    <tr><td>4 jumper wires</td><td>Female-to-female</td></tr>
+  </table>
+
+  <h3>CP2102 Wiring</h3>
+  <p>Locate the 6-pin header on the board near the IO0 and EN buttons.</p>
+
+  <!-- CP2102 Diagram -->
+  <div class="diagram-wrap no-break">
+    <svg viewBox="0 0 620 220" xmlns="http://www.w3.org/2000/svg" style="max-width:600px">
+      <rect width="620" height="220" fill="#f4f7fb" rx="12"/>
+
+      <!-- CP2102 -->
+      <rect x="30" y="50" width="130" height="130" fill="#0d1b2a" rx="8"/>
+      <text x="95" y="78" text-anchor="middle" fill="#4fc3f7" font-family="Inter,sans-serif" font-size="12" font-weight="700">CP2102</text>
+      <text x="95" y="96" text-anchor="middle" fill="#90caf9" font-family="Inter,sans-serif" font-size="10">USB Adapter</text>
+
+      <!-- CP2102 pins (right side) -->
+      <circle cx="160" cy="120" r="5" fill="#ef5350"/>
+      <text x="172" y="124" fill="#ef5350" font-family="JetBrains Mono,monospace" font-size="10" font-weight="600">TX</text>
+      <circle cx="160" cy="145" r="5" fill="#66bb6a"/>
+      <text x="172" y="149" fill="#66bb6a" font-family="JetBrains Mono,monospace" font-size="10" font-weight="600">RX</text>
+      <circle cx="160" cy="170" r="5" fill="#888"/>
+      <text x="172" y="174" fill="#888" font-family="JetBrains Mono,monospace" font-size="10" font-weight="600">GND</text>
+      <circle cx="160" cy="95" r="5" fill="#ffd54f"/>
+      <text x="172" y="99" fill="#ffd54f" font-family="JetBrains Mono,monospace" font-size="10" font-weight="600">3.3V</text>
+
+      <!-- Board 6-pin header -->
+      <rect x="420" y="40" width="160" height="160" fill="#0d1b2a" rx="8"/>
+      <text x="500" y="66" text-anchor="middle" fill="#4fc3f7" font-family="Inter,sans-serif" font-size="12" font-weight="700">Board Header</text>
+      <text x="500" y="84" text-anchor="middle" fill="#607080" font-family="Inter,sans-serif" font-size="9">6-pin near IO0/EN</text>
+
+      <!-- Board pins (left side) -->
+      <circle cx="420" cy="105" r="5" fill="#ffd54f"/>
+      <text x="406" y="109" text-anchor="end" fill="#ffd54f" font-family="JetBrains Mono,monospace" font-size="10" font-weight="600">3V3</text>
+      <circle cx="420" cy="128" r="5" fill="#888"/>
+      <text x="406" y="132" text-anchor="end" fill="#888" font-family="JetBrains Mono,monospace" font-size="10" font-weight="600">GND</text>
+      <circle cx="420" cy="151" r="5" fill="#66bb6a"/>
+      <text x="406" y="155" text-anchor="end" fill="#66bb6a" font-family="JetBrains Mono,monospace" font-size="10" font-weight="600">TX</text>
+      <circle cx="420" cy="174" r="5" fill="#ef5350"/>
+      <text x="406" y="178" text-anchor="end" fill="#ef5350" font-family="JetBrains Mono,monospace" font-size="10" font-weight="600">RX</text>
+
+      <!-- Wires (note TX→RX crossover) -->
+      <line x1="166" y1="95"  x2="414" y2="105" stroke="#ffd54f" stroke-width="2" stroke-dasharray="5,3"/>
+      <line x1="166" y1="170" x2="414" y2="128" stroke="#888"    stroke-width="2" stroke-dasharray="5,3"/>
+      <line x1="166" y1="120" x2="414" y2="174" stroke="#ef5350" stroke-width="2" stroke-dasharray="5,3"/>
+      <line x1="166" y1="145" x2="414" y2="151" stroke="#66bb6a" stroke-width="2" stroke-dasharray="5,3"/>
+
+      <!-- Crossover label -->
+      <rect x="268" y="116" width="84" height="18" fill="#fff" rx="4"/>
+      <text x="310" y="129" text-anchor="middle" fill="#f0a500" font-family="Inter,sans-serif" font-size="9" font-weight="600">TX → RX (crossed)</text>
+    </svg>
+    <div class="diagram-caption">Figure 2 — CP2102 to board wiring. Note TX and RX are crossed: adapter TX connects to board RX, and vice versa.</div>
+  </div>
+
+  <h3>Arduino IDE Setup</h3>
+  <ol class="steps">
+    <li>
+      <div class="step-text"><strong>Install the ESP32 board package.</strong> In Arduino IDE go to <strong>File → Preferences</strong> and add this URL to Additional Boards Manager URLs:</div>
+      <div class="code-block">https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json</div>
+    </li>
+    <li>
+      <div class="step-text">Go to <strong>Tools → Board Manager</strong>, search <strong>esp32</strong>, and install <strong>esp32 by Espressif Systems version 3.3.8</strong>.</div>
+    </li>
+    <li>
+      <div class="step-text"><strong>Install required libraries</strong> via <strong>Tools → Manage Libraries</strong>:</div>
+      <table style="margin-top:8px">
+        <tr><th>Library</th><th>Author</th></tr>
+        <tr><td>WiFiManager</td><td>tzapu</td></tr>
+        <tr><td>ArduinoJson</td><td>bblanchon — install version 6.x</td></tr>
+        <tr><td>NTPClient</td><td>Fabrice Weinberg</td></tr>
+      </table>
+    </li>
+    <li>
+      <div class="step-text"><strong>Select board settings:</strong></div>
+      <table style="margin-top:8px">
+        <tr><th>Setting</th><th>Value</th></tr>
+        <tr><td>Board</td><td>ESP32 Dev Module</td></tr>
+        <tr><td>Partition Scheme</td><td>Default 4MB with spiffs</td></tr>
+        <tr><td>Upload Speed</td><td>921600</td></tr>
+        <tr><td>Port</td><td>Whichever COM port the CP2102 appears on</td></tr>
+      </table>
+    </li>
+  </ol>
+
+  <h3>Flashing the Firmware</h3>
+
+  <!-- Flash mode diagram -->
+  <div class="diagram-wrap no-break">
+    <svg viewBox="0 0 580 130" xmlns="http://www.w3.org/2000/svg" style="max-width:560px">
+      <rect width="580" height="130" fill="#f4f7fb" rx="12"/>
+
+      <!-- Steps -->
+      <!-- Step 1 -->
+      <rect x="20" y="30" width="120" height="70" fill="#0d1b2a" rx="8"/>
+      <text x="80" y="58" text-anchor="middle" fill="#4fc3f7" font-family="Inter,sans-serif" font-size="11" font-weight="700">① Hold IO0</text>
+      <text x="80" y="76" text-anchor="middle" fill="#90caf9" font-family="Inter,sans-serif" font-size="10">Press and hold</text>
+      <text x="80" y="91" text-anchor="middle" fill="#90caf9" font-family="Inter,sans-serif" font-size="10">the IO0 button</text>
+
+      <text x="158" y="70" text-anchor="middle" fill="#607080" font-family="Inter,sans-serif" font-size="20">→</text>
+
+      <!-- Step 2 -->
+      <rect x="170" y="30" width="120" height="70" fill="#0d1b2a" rx="8"/>
+      <text x="230" y="58" text-anchor="middle" fill="#4fc3f7" font-family="Inter,sans-serif" font-size="11" font-weight="700">② Tap EN</text>
+      <text x="230" y="76" text-anchor="middle" fill="#90caf9" font-family="Inter,sans-serif" font-size="10">Press and release</text>
+      <text x="230" y="91" text-anchor="middle" fill="#90caf9" font-family="Inter,sans-serif" font-size="10">the EN button</text>
+
+      <text x="308" y="70" text-anchor="middle" fill="#607080" font-family="Inter,sans-serif" font-size="20">→</text>
+
+      <!-- Step 3 -->
+      <rect x="320" y="30" width="120" height="70" fill="#0d1b2a" rx="8"/>
+      <text x="380" y="58" text-anchor="middle" fill="#4fc3f7" font-family="Inter,sans-serif" font-size="11" font-weight="700">③ Release IO0</text>
+      <text x="380" y="76" text-anchor="middle" fill="#90caf9" font-family="Inter,sans-serif" font-size="10">Release IO0 when</text>
+      <text x="380" y="91" text-anchor="middle" fill="#90caf9" font-family="Inter,sans-serif" font-size="10">"Connecting..." shows</text>
+
+      <text x="458" y="70" text-anchor="middle" fill="#607080" font-family="Inter,sans-serif" font-size="20">→</text>
+
+      <!-- Step 4 -->
+      <rect x="468" y="30" width="92" height="70" fill="#1a3a5c" rx="8"/>
+      <text x="514" y="58" text-anchor="middle" fill="#4fc3f7" font-family="Inter,sans-serif" font-size="11" font-weight="700">Upload</text>
+      <text x="514" y="76" text-anchor="middle" fill="#90caf9" font-family="Inter,sans-serif" font-size="10">Click Upload</text>
+      <text x="514" y="91" text-anchor="middle" fill="#90caf9" font-family="Inter,sans-serif" font-size="10">in Arduino IDE</text>
+    </svg>
+    <div class="diagram-caption">Figure 3 — Flash mode sequence. Must be done each time you upload via serial.</div>
+  </div>
+
+  <ol class="steps">
+    <li><div class="step-text">Open <code>sprinkler_controller.ino</code> in Arduino IDE and click <strong>Upload</strong>.</div></li>
+    <li><div class="step-text">When the IDE shows <em>"Connecting..."</em>, perform the boot sequence above: hold IO0 → tap EN → release IO0.</div></li>
+    <li><div class="step-text">The firmware uploads. When complete the Serial Monitor will show <code>[BOOT] All systems GO</code>.</div></li>
+  </ol>
+
+  <h3>Uploading the Web Interface</h3>
+  <ol class="steps">
+    <li><div class="step-text">In Arduino IDE press <strong>Ctrl+Shift+P</strong> and select <strong>Upload LittleFS image</strong>.</div></li>
+    <li><div class="step-text">Perform the same boot sequence: hold IO0 → tap EN → release IO0.</div><div class="step-note">Close the Serial Monitor first — it blocks the COM port.</div></li>
+    <li><div class="step-text">Wait for the upload to complete. The web interface is now stored on the board.</div></li>
+  </ol>
+
+  <div class="callout tip">
+    <div class="callout-icon">💡</div>
+    <div class="callout-body"><strong>Serial connection is only needed once</strong>After the initial firmware and UI are loaded, all future updates can be done wirelessly from the web interface. The CP2102 adapter can be disconnected and stored.</div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     SECTION 4 — FIRST BOOT
+════════════════════════════════════════════════════════ -->
+<div class="content page-break">
+  <div class="section-label">Section 4</div>
+  <h2>First Boot &amp; WiFi Setup</h2>
+  <div class="section-rule"></div>
+
+  <ol class="steps">
+    <li>
+      <div class="step-text"><strong>Power on the board.</strong> On first boot it creates a WiFi hotspot named <strong>SprinklerSetup</strong>.</div>
+    </li>
+    <li>
+      <div class="step-text"><strong>Connect to SprinklerSetup</strong> from your phone or laptop.</div>
+      <div class="step-note">Password: <code>sprinkler123</code></div>
+    </li>
+    <li>
+      <div class="step-text"><strong>A setup page opens automatically.</strong> If it doesn't, open a browser and go to <code>192.168.4.1</code>.</div>
+    </li>
+    <li>
+      <div class="step-text">Tap <strong>Configure WiFi</strong>, select your home network, enter the password, and tap <strong>Save</strong>.</div>
+    </li>
+    <li>
+      <div class="step-text">The board reboots and connects to your network.</div>
+    </li>
+    <li>
+      <div class="step-text">Open a browser on any device connected to the same WiFi and go to:</div>
+      <div class="step-note"><code>http://sprinkler.local</code></div>
+      <div class="step-text">The SprinKlr-8 interface will load. No IP address needed.</div>
+      <div class="step-note"><strong>Note:</strong> <code>sprinkler.local</code> works automatically on iPhone, iPad, Mac, Android, and Windows 10/11. If it doesn't load, check that your device is on the same WiFi network as the controller.</div>
+    </li>
+  </ol>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     SECTION 5 — USING THE WEB INTERFACE
+════════════════════════════════════════════════════════ -->
+<div class="content page-break">
+  <div class="section-label">Section 5</div>
+  <h2>Using the Web Interface</h2>
+  <div class="section-rule"></div>
+
+  <p>Open a browser on any device on the same WiFi network and go to <code>http://[board IP]/</code>. The interface works on phones, tablets, and desktops.</p>
+
+  <h3>Dashboard</h3>
+  <p>Shows the current run status — which zone is active and how much time remains. Each zone has a <strong>Run</strong> and <strong>Stop</strong> button for quick manual control.</p>
+
+  <h3>Schedule</h3>
+  <p>Set your automatic watering schedule. Enable individual days, set a start time, and enter how many minutes each zone should run. The master toggle at the top enables or disables automatic scheduling without losing your settings.</p>
+
+  <h3>Manual</h3>
+  <p>Run a single zone for a specific number of minutes, or trigger a full day's schedule to run immediately. Useful for testing after installation.</p>
+
+  <h3>Settings</h3>
+  <p>View system information, rename zones, and apply over-the-air updates.</p>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     SECTION 6 — SWITCHING NETWORKS
+════════════════════════════════════════════════════════ -->
+<div class="content page-break">
+  <div class="section-label">Section 6</div>
+  <h2>Switching to a Different WiFi Network</h2>
+  <div class="section-rule"></div>
+
+  <p>To move the board to a new location or change your WiFi network, use the IO0 button on the board to clear the saved credentials.</p>
+
+  <!-- IO0 reset diagram -->
+  <div class="diagram-wrap no-break">
+    <svg viewBox="0 0 560 120" xmlns="http://www.w3.org/2000/svg" style="max-width:540px">
+      <rect width="560" height="120" fill="#f4f7fb" rx="12"/>
+
+      <rect x="20" y="25" width="110" height="70" fill="#0d1b2a" rx="8"/>
+      <text x="75" y="50" text-anchor="middle" fill="#4fc3f7" font-family="Inter,sans-serif" font-size="11" font-weight="700">① Press EN</text>
+      <text x="75" y="67" text-anchor="middle" fill="#90caf9" font-family="Inter,sans-serif" font-size="10">Press and release</text>
+      <text x="75" y="82" text-anchor="middle" fill="#90caf9" font-family="Inter,sans-serif" font-size="10">EN to reboot</text>
+
+      <text x="143" y="65" text-anchor="middle" fill="#607080" font-family="Inter,sans-serif" font-size="20">→</text>
+
+      <rect x="158" y="25" width="130" height="70" fill="#0d1b2a" rx="8"/>
+      <text x="223" y="50" text-anchor="middle" fill="#4fc3f7" font-family="Inter,sans-serif" font-size="11" font-weight="700">② Hold IO0</text>
+      <text x="223" y="67" text-anchor="middle" fill="#90caf9" font-family="Inter,sans-serif" font-size="10">Within 2 seconds</text>
+      <text x="223" y="82" text-anchor="middle" fill="#90caf9" font-family="Inter,sans-serif" font-size="10">press and hold IO0</text>
+
+      <text x="301" y="65" text-anchor="middle" fill="#607080" font-family="Inter,sans-serif" font-size="20">→</text>
+
+      <rect x="315" y="25" width="130" height="70" fill="#0d1b2a" rx="8"/>
+      <text x="380" y="50" text-anchor="middle" fill="#4fc3f7" font-family="Inter,sans-serif" font-size="11" font-weight="700">③ Hold 3 seconds</text>
+      <text x="380" y="67" text-anchor="middle" fill="#90caf9" font-family="Inter,sans-serif" font-size="10">Keep holding until</text>
+      <text x="380" y="82" text-anchor="middle" fill="#90caf9" font-family="Inter,sans-serif" font-size="10">credentials wiped</text>
+
+      <text x="458" y="65" text-anchor="middle" fill="#607080" font-family="Inter,sans-serif" font-size="20">→</text>
+
+      <rect x="470" y="25" width="70" height="70" fill="#1a3a5c" rx="8"/>
+      <text x="505" y="58" text-anchor="middle" fill="#4fc3f7" font-family="Inter,sans-serif" font-size="10" font-weight="700">Setup portal</text>
+      <text x="505" y="74" text-anchor="middle" fill="#90caf9" font-family="Inter,sans-serif" font-size="9">opens again</text>
+    </svg>
+    <div class="diagram-caption">Figure 4 — WiFi reset sequence. Releasing IO0 before 3 seconds cancels the reset.</div>
+  </div>
+
+  <p>After the reset, follow the <strong>First Boot &amp; WiFi Setup</strong> steps in Section 4 to connect to the new network.</p>
+
+  <div class="callout tip">
+    <div class="callout-icon">💡</div>
+    <div class="callout-body"><strong>No serial connection needed</strong>This procedure works entirely with the buttons on the board. No laptop or cables required.</div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     SECTION 7 — OTA UPDATES
+════════════════════════════════════════════════════════ -->
+<div class="content page-break">
+  <div class="section-label">Section 7</div>
+  <h2>Over-the-Air Updates</h2>
+  <div class="section-rule"></div>
+
+  <p>Once the board is on your network, all future updates are done through the web interface. No cables needed.</p>
+
+  <h3>Update the Web Interface</h3>
+  <ol class="steps">
+    <li><div class="step-text">Open <code>http://[board IP]/</code> in a browser.</div></li>
+    <li><div class="step-text">Go to <strong>Settings</strong> and scroll to the <strong>Updates</strong> section.</div></li>
+    <li><div class="step-text">Tap <strong>Download &amp; Apply from GitHub</strong>.</div></li>
+    <li><div class="step-text">The board downloads the latest interface and the page reloads automatically.</div></li>
+  </ol>
+
+  <h3>Update the Firmware</h3>
+  <ol class="steps">
+    <li><div class="step-text">Open <code>http://[board IP]/</code> in a browser.</div></li>
+    <li><div class="step-text">Go to <strong>Settings</strong> and scroll to the <strong>Updates</strong> section.</div></li>
+    <li><div class="step-text">Tap <strong>Download &amp; Flash from GitHub</strong> and confirm the prompt.</div></li>
+    <li><div class="step-text">The board downloads and installs the new firmware, then reboots. Wait approximately 15 seconds before refreshing the page.</div></li>
+  </ol>
+
+  <div class="callout warn">
+    <div class="callout-icon">⚠️</div>
+    <div class="callout-body"><strong>During a firmware update</strong>All relay zones are turned off automatically before flashing begins. Do not power off the board during an update.</div>
+  </div>
+
+  <h3>Current Version</h3>
+  <p>The current firmware version is shown next to the <strong>Firmware</strong> button in the Settings → Updates section.</p>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     SECTION 8 — TROUBLESHOOTING
+════════════════════════════════════════════════════════ -->
+<div class="content page-break">
+  <div class="section-label">Section 8</div>
+  <h2>Troubleshooting</h2>
+  <div class="section-rule"></div>
+
+  <table>
+    <tr><th>Problem</th><th>Solution</th></tr>
+    <tr>
+      <td>Can't find board on network</td>
+      <td>Confirm board is powered on and status LED is blinking. Try <code>http://sprinkler.local</code> from a device on the same WiFi. As a fallback, check your router's device list for <strong>sprinkler</strong> to get the IP address directly.</td>
+    </tr>
+    <tr>
+      <td>Web page won't load</td>
+      <td>Confirm your phone/laptop is on the same WiFi as the board. Try the IP address directly instead of <code>http://sprinkler/</code>.</td>
+    </tr>
+    <tr>
+      <td>Zone doesn't activate</td>
+      <td>Check wiring at the relay terminal for that zone. Use Manual → run zone and listen for the valve to click. Confirm the Common wire is connected.</td>
+    </tr>
+    <tr>
+      <td>Schedule not running</td>
+      <td>Check the master schedule toggle in the Schedule page is ON. Confirm the correct days are enabled and start time is set.</td>
+    </tr>
+    <tr>
+      <td>LittleFS upload fails (error code 2)</td>
+      <td>Close the Serial Monitor first — it blocks the COM port. Then retry with the IO0/EN boot sequence.</td>
+    </tr>
+    <tr>
+      <td>OTA firmware update fails</td>
+      <td>Confirm the board has internet access. Check that a release exists on GitHub with a file named <code>sprinkler_controller.bin</code>.</td>
+    </tr>
+    <tr>
+      <td>Board won't enter flash mode</td>
+      <td>Make sure to hold IO0 before tapping EN, and release IO0 only after "Connecting..." appears in the IDE.</td>
+    </tr>
+    <tr>
+      <td>SprinklerSetup hotspot not appearing</td>
+      <td>Perform the WiFi reset procedure in Section 6 to force the setup portal to open.</td>
+    </tr>
+  </table>
+</div>
+
+</body>
+</html>

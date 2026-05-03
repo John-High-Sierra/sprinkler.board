@@ -232,6 +232,47 @@ select:focus, input[type="number"]:focus { outline: none; border-color: #4fc3f7;
     </div>
   </div>
 
+  <div class="sec-hdr"><span class="sec-title">Timezone</span></div>
+  <div class="settings-section">
+    <div class="settings-row" style="flex-direction:column;align-items:flex-start;gap:12px">
+      <span class="settings-label">Local Timezone</span>
+      <select id="tz-select" style="width:100%">
+        <option value="UTC0">UTC (Coordinated Universal Time)</option>
+        <optgroup label="United States">
+          <option value="EST5EDT,M3.2.0,M11.1.0">US Eastern (EST/EDT)</option>
+          <option value="CST6CDT,M3.2.0,M11.1.0">US Central (CST/CDT)</option>
+          <option value="MST7MDT,M3.2.0,M11.1.0">US Mountain (MST/MDT)</option>
+          <option value="MST7">US Mountain – Arizona (no DST)</option>
+          <option value="PST8PDT,M3.2.0,M11.1.0">US Pacific (PST/PDT)</option>
+          <option value="AKST9AKDT,M3.2.0,M11.1.0">US Alaska (AKST/AKDT)</option>
+          <option value="HST10">US Hawaii (no DST)</option>
+        </optgroup>
+        <optgroup label="Canada">
+          <option value="EST5EDT,M3.2.0,M11.1.0">Canada Eastern (EST/EDT)</option>
+          <option value="CST6CDT,M3.2.0,M11.1.0">Canada Central (CST/CDT)</option>
+          <option value="MST7MDT,M3.2.0,M11.1.0">Canada Mountain (MST/MDT)</option>
+          <option value="PST8PDT,M3.2.0,M11.1.0">Canada Pacific (PST/PDT)</option>
+        </optgroup>
+        <optgroup label="Europe">
+          <option value="GMT0BST,M3.5.0/1,M10.5.0">UK (GMT/BST)</option>
+          <option value="CET-1CEST,M3.5.0,M10.5.0/3">Central Europe (CET/CEST)</option>
+          <option value="EET-2EEST,M3.5.0/3,M10.5.0/4">Eastern Europe (EET/EEST)</option>
+        </optgroup>
+        <optgroup label="Australia">
+          <option value="AEST-10AEDT,M10.1.0,M4.1.0/3">Australia Eastern (AEST/AEDT)</option>
+          <option value="ACST-9:30ACDT,M10.1.0,M4.1.0/3">Australia Central (ACST/ACDT)</option>
+          <option value="AWST-8">Australia Western (AWST, no DST)</option>
+        </optgroup>
+        <optgroup label="Other">
+          <option value="JST-9">Japan (JST, no DST)</option>
+          <option value="CST-8">China (CST, no DST)</option>
+          <option value="IST-5:30">India (IST, no DST)</option>
+        </optgroup>
+      </select>
+      <button class="btn-full btn-blue" style="width:100%;margin:0" onclick="saveTz()">Save Timezone</button>
+    </div>
+  </div>
+
   <div class="sec-hdr"><span class="sec-title">Zone Names</span></div>
   <div class="settings-section" id="zoneNamesList"></div>
 
@@ -329,15 +370,17 @@ function getNames() {
 function setNames(n) { localStorage.setItem('znames', JSON.stringify(n)); }
 
 // ── Mock data ──────────────────────────────────────────
-let mStat  = {is_running:false,day_index:-1,active_sprinkler:-1,remaining_time:0,manual_run:false};
-let mSched = {enabled:true, schedule:Array.from({length:7},()=>({is_active:false,hour:7,minute:0,durations:Array(ZONES).fill(10)}))};
-let mInfo  = {ip_address:'10.110.201.40',free_heap:195000,min_free_heap:162000,uptime_sec:5420,ntp_synced:true,current_time:'2026-04-18 07:23:00'};
+let mStat   = {is_running:false,day_index:-1,active_sprinkler:-1,remaining_time:0,manual_run:false};
+let mSched  = {enabled:true, schedule:Array.from({length:7},()=>({is_active:false,hour:7,minute:0,durations:Array(ZONES).fill(10)}))};
+let mInfo   = {ip_address:'10.110.201.40',free_heap:195000,min_free_heap:162000,uptime_sec:5420,ntp_synced:true,current_time:'2026-04-18 07:23:00'};
+let mConfig = {timezone:'UTC0'};
 
 async function GET(p) {
   if (PREVIEW) {
     if (p==='/api/status')      return JSON.parse(JSON.stringify(mStat));
     if (p==='/api/schedule')    return JSON.parse(JSON.stringify(mSched));
     if (p==='/api/system_info') return JSON.parse(JSON.stringify(mInfo));
+    if (p==='/api/config')      return {timezone: mConfig.timezone};
   }
   return (await fetch(p)).json();
 }
@@ -345,6 +388,7 @@ async function POST(p,b) {
   if (PREVIEW) {
     if (p==='/api/toggle_schedule') { mSched.enabled=!mSched.enabled; return {enabled:mSched.enabled}; }
     if (p==='/api/schedule')        { mSched.schedule=b; return {message:'Saved'}; }
+    if (p==='/api/config')          { mConfig.timezone=b.timezone; return {message:'Config saved'}; }
     if (p==='/api/stop_sequence')   { mStat={is_running:false,day_index:-1,active_sprinkler:-1,remaining_time:0,manual_run:false}; return {message:'Stopped'}; }
     if (p==='/api/run_day')         { mStat={is_running:true,day_index:b.day,active_sprinkler:0,remaining_time:600,manual_run:true}; return {message:'Started'}; }
     if (p==='/api/run_zone')        { mStat={is_running:true,day_index:-1,active_sprinkler:b.zone,remaining_time:b.duration*60,manual_run:true}; return {message:'Started'}; }
@@ -366,7 +410,7 @@ function showPage(pg, el) {
   document.getElementById('page-'+pg).classList.add('active');
   if (el) el.classList.add('active');
   if (pg==='status')   pollInfo();
-  if (pg==='settings') { renderZoneNameSettings(); pollInfo(); }
+  if (pg==='settings') { renderZoneNameSettings(); loadTz(); pollInfo(); }
 }
 
 // ── Running banner ─────────────────────────────────────
@@ -571,14 +615,40 @@ async function toggleSched() {
 }
 async function saveSchedule() {
   if (!schedData) return;
-  const data = schedData.map((_,d) => ({
-    is_active : schedData[d].is_active,
-    hour      : parseInt(document.getElementById(`h_${d}`).value)    || 0,
-    minute    : parseInt(document.getElementById(`m_${d}`).value)    || 0,
-    durations : Array.from({length:ZONES},(_,z) => parseInt(document.getElementById(`dur_${d}_${z}`).value) || 0)
-  }));
+  const data = schedData.map((_,d) => {
+    const h = document.getElementById(`h_${d}`);
+    const m = document.getElementById(`m_${d}`);
+    const hVal = h ? (parseInt(h.value) >= 0 ? parseInt(h.value) : 0) : schedData[d].hour;
+    const mVal = m ? (parseInt(m.value) >= 0 ? parseInt(m.value) : 0) : schedData[d].minute;
+    return {
+      is_active : schedData[d].is_active,
+      hour      : isNaN(hVal) ? schedData[d].hour   : Math.min(23, Math.max(0, hVal)),
+      minute    : isNaN(mVal) ? schedData[d].minute  : Math.min(59, Math.max(0, mVal)),
+      durations : Array.from({length:ZONES}, (_,z) => {
+        const el = document.getElementById(`dur_${d}_${z}`);
+        const v = el ? parseInt(el.value) : schedData[d].durations[z];
+        return isNaN(v) ? 0 : Math.min(120, Math.max(0, v));
+      })
+    };
+  });
   const r = await POST('/api/schedule', data);
-  r.message ? toast('Schedule saved ✓') : toast(r.error||'Save failed','err');
+  if (r.message) {
+    // Update schedData so card headers reflect the saved values
+    data.forEach((day, d) => {
+      schedData[d].hour     = day.hour;
+      schedData[d].minute   = day.minute;
+      schedData[d].durations = day.durations.slice();
+    });
+    // Refresh card headers without rebuilding the whole list
+    data.forEach((day, d) => {
+      const timeEl = document.querySelector(`#sc${d} .sched-time`);
+      if (timeEl) timeEl.textContent =
+        String(day.hour).padStart(2,'0') + ':' + String(day.minute).padStart(2,'0');
+    });
+    toast('Schedule saved ✓');
+  } else {
+    toast(r.error || 'Save failed', 'err');
+  }
 }
 
 // ── Manual ─────────────────────────────────────────────
@@ -605,6 +675,36 @@ async function runDayNow(d) {
 async function stopAll() {
   const r = await POST('/api/stop_sequence');
   r.message ? toast('Stopped ■') : toast(r.error||'Failed','err');
+}
+
+// ── Timezone ───────────────────────────────────────────
+async function loadTz() {
+  try {
+    const r = await GET('/api/config');
+    if (r.timezone) {
+      const sel = document.getElementById('tz-select');
+      if (sel) {
+        // Try to match stored value to an option
+        let matched = false;
+        for (const opt of sel.options) {
+          if (opt.value === r.timezone) { sel.value = r.timezone; matched = true; break; }
+        }
+        if (!matched) {
+          // Add a custom option for unrecognised POSIX strings
+          const opt = document.createElement('option');
+          opt.value = r.timezone; opt.textContent = r.timezone;
+          sel.insertBefore(opt, sel.firstChild);
+          sel.value = r.timezone;
+        }
+      }
+    }
+  } catch(e) {}
+}
+async function saveTz() {
+  const sel = document.getElementById('tz-select');
+  if (!sel) return;
+  const r = await POST('/api/config', { timezone: sel.value });
+  r.message ? toast('Timezone saved ✓ — time updates in ~30s') : toast(r.error||'Save failed','err');
 }
 
 // ── Settings ───────────────────────────────────────────

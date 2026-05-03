@@ -9,23 +9,26 @@
 
 ## Where We Are
 
-The firmware compiles cleanly and the board is running. The web UI is deployed and works. The project is at the point where the new mobile-first UI (`index.html`) has just been rewritten and needs final review + deployment.
+Firmware v1.1.0 is fully working. GitHub repo live at https://github.com/John-High-Sierra/sprinkler.board
 
 ### What is working
 - Firmware compiles with zero errors on ESP32 core 3.3.8
 - Board boots, connects to WiFi, syncs NTP
-- LittleFS filesystem upload works (UI served from board)
 - All relay zones activate correctly via manual run
 - Automatic schedule runs via FreeRTOS task
 - Stop sequence works
 - Web UI accessible at `http://10.110.201.40/`
-- WiFi network reset via IO0 button (confirmed working — see note 8 below)
+- WiFi network reset via IO0 button (see note 8)
+- ArduinoOTA — flash firmware from Arduino IDE over WiFi, no serial cable needed
+- Cloud OTA — firmware and UI update from GitHub via Settings page in web UI
+- GitHub Actions workflow — push a `v*` tag to auto-compile and release firmware
+- Git repo on GitHub with v1.1.0 release
 
 ### What still needs to be done
-1. **Review the new UI** — `index.html` was rewritten to match the mockup in `data/sprinkler_mockup_v2.html`. Open it in a browser to preview (`PREVIEW = true` so all buttons work with mock data).
-2. **Set `PREVIEW = false`** in `data/index.html` (line ~12 — the `const PREVIEW = true;` near top of `<script>`)
-3. **Upload LittleFS** — Ctrl+Shift+P → "Upload LittleFS image" in Arduino IDE to push the new `index.html` to the board
-4. **Test on hardware** — navigate to `http://10.110.201.40/` and confirm new UI works end-to-end
+1. **Upload new UI to board** — Ctrl+Shift+P → "Upload LittleFS image"
+   - Was failing with error code 2 (Serial Monitor was open or board not in flash mode)
+   - Close Serial Monitor first, use IO0/EN boot sequence, then upload
+2. **Test new UI** — navigate to `http://10.110.201.40/` and confirm Updates section appears in Settings
 
 ---
 
@@ -144,3 +147,5 @@ Port:             whichever COM port the CP2102 appears on
 | 2026-04-18 | Migrated to WebServer.h (core 3.3.8) — ESPAsyncWebServer removed |
 | 2026-04-18 | New mobile-first UI written to replace placeholder layout |
 | 2026-04-19 | WiFi network reset via IO0 button added and confirmed working |
+| 2026-04-19 | ArduinoOTA + cloud OTA from GitHub added (firmware v1.1.0) |
+| 2026-04-19 | GitHub Actions workflow added for auto-build on version tag |
