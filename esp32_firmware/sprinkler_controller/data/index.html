@@ -67,6 +67,7 @@ header { background: #131f2e; padding: 12px 16px; display: flex; align-items: ce
 .t-inp { background: #0f3460; border: 2px solid #1a4a7a; color: #eee; padding: 10px 12px; border-radius: 10px; font-size: 1.2rem; text-align: center; width: 72px; font-family: inherit; }
 .t-inp:focus { outline: none; border-color: #4fc3f7; }
 .sep { color: #4fc3f7; font-size: 1.3rem; font-weight: bold; }
+.ampm-sel { width: 84px !important; padding-left: 8px; padding-right: 4px; }
 
 .zones-lbl { font-size: 0.95rem; color: #90caf9; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; margin-bottom: 8px; }
 .zone-dur-row { display: flex; align-items: center; gap: 10px; padding: 12px 12px; border-radius: 10px; margin-bottom: 8px; background: #0d1620; border: 1px solid transparent; transition: background 0.3s, border-color 0.3s; }
@@ -362,6 +363,20 @@ const PREVIEW = false;  // set false when deployed to ESP32
 const ZONES   = 8;
 const DAYS    = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
 
+// ── Time helpers ────────────────────────────────────────
+function fmt12(h, m) {
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  const h12  = h % 12 || 12;
+  return `${h12}:${String(m).padStart(2,'0')} ${ampm}`;
+}
+function to24(h12, m, ampm) {
+  let h = parseInt(h12) || 12;
+  h = Math.min(12, Math.max(1, h));
+  if (ampm === 'AM') { if (h === 12) h = 0; }
+  else               { if (h !== 12) h += 12; }
+  return { hour: h, minute: Math.min(59, Math.max(0, parseInt(m) || 0)) };
+}
+
 // ── Zone names (localStorage) ──────────────────────────
 function getNames() {
   try { return JSON.parse(localStorage.getItem('znames')) || Array.from({length:ZONES},(_,i)=>`Zone ${i+1}`); }
@@ -507,7 +522,8 @@ function updateHeaderTime(timeStr) {
   if (!timeStr) return;
   const parts = timeStr.split(' ');
   if (parts.length === 2) {
-    document.getElementById('hdr-time').textContent = parts[1].substring(0,5);
+    const [hh, mm] = parts[1].split(':');
+    document.getElementById('hdr-time').textContent = fmt12(parseInt(hh), parseInt(mm));
   }
 }
 
@@ -554,8 +570,9 @@ function renderSchedule() {
   const names = getNames();
   list.innerHTML = '';
   schedData.forEach((day, d) => {
-    const hh = String(day.hour).padStart(2,'0');
-    const mm = String(day.minute).padStart(2,'0');
+    const timeDisplay = fmt12(day.hour, day.minute);
+    const h12inp      = day.hour % 12 || 12;
+    const ampmInp     = day.hour >= 12 ? 'PM' : 'AM';
 
     // Zone duration rows
     let zoneRows = '';
@@ -577,15 +594,19 @@ function renderSchedule() {
     card.innerHTML = `
       <div class="sched-card-hdr" onclick="togBody(${d})">
         <div class="sched-day-name">${DAYS[d]}</div>
-        <div class="sched-time">${hh}:${mm}</div>
+        <div class="sched-time">${timeDisplay}</div>
         <div class="tog${day.is_active?' on':''}" id="st${d}" onclick="event.stopPropagation();togDay(${d})"></div>
       </div>
       <div class="sched-body" id="sb${d}">
         <div class="time-row">
           <label>Start</label>
-          <input class="t-inp" type="number" min="0" max="23" value="${day.hour}" id="h_${d}">
+          <input class="t-inp" type="number" min="1" max="12" value="${h12inp}" id="h_${d}">
           <span class="sep">:</span>
           <input class="t-inp" type="number" min="0" max="59" value="${day.minute}" id="m_${d}">
+          <select class="t-inp ampm-sel" id="ap_${d}">
+            <option${ampmInp==='AM'?' selected':''}>AM</option>
+            <option${ampmInp==='PM'?' selected':''}>PM</option>
+          </select>
         </div>
         <div class="zones-lbl">Zone Durations (minutes)</div>
         ${zoneRows}
@@ -616,14 +637,18 @@ async function toggleSched() {
 async function saveSchedule() {
   if (!schedData) return;
   const data = schedData.map((_,d) => {
-    const h = document.getElementById(`h_${d}`);
-    const m = document.getElementById(`m_${d}`);
-    const hVal = h ? (parseInt(h.value) >= 0 ? parseInt(h.value) : 0) : schedData[d].hour;
-    const mVal = m ? (parseInt(m.value) >= 0 ? parseInt(m.value) : 0) : schedData[d].minute;
+    const hInp  = document.getElementById(`h_${d}`);
+    const mInp  = document.getElementById(`m_${d}`);
+    const apSel = document.getElementById(`ap_${d}`);
+    const h12   = hInp  ? parseInt(hInp.value)  : (schedData[d].hour % 12 || 12);
+    const mVal  = mInp  ? parseInt(mInp.value)   : schedData[d].minute;
+    const ampm  = apSel ? apSel.value            : (schedData[d].hour >= 12 ? 'PM' : 'AM');
+    const t24   = to24(isNaN(h12) ? (schedData[d].hour%12||12) : h12,
+                       isNaN(mVal) ? schedData[d].minute : mVal, ampm);
     return {
       is_active : schedData[d].is_active,
-      hour      : isNaN(hVal) ? schedData[d].hour   : Math.min(23, Math.max(0, hVal)),
-      minute    : isNaN(mVal) ? schedData[d].minute  : Math.min(59, Math.max(0, mVal)),
+      hour      : t24.hour,
+      minute    : t24.minute,
       durations : Array.from({length:ZONES}, (_,z) => {
         const el = document.getElementById(`dur_${d}_${z}`);
         const v = el ? parseInt(el.value) : schedData[d].durations[z];
@@ -642,8 +667,7 @@ async function saveSchedule() {
     // Refresh card headers without rebuilding the whole list
     data.forEach((day, d) => {
       const timeEl = document.querySelector(`#sc${d} .sched-time`);
-      if (timeEl) timeEl.textContent =
-        String(day.hour).padStart(2,'0') + ':' + String(day.minute).padStart(2,'0');
+      if (timeEl) timeEl.textContent = fmt12(day.hour, day.minute);
     });
     toast('Schedule saved ✓');
   } else {

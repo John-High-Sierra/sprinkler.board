@@ -1,0 +1,765 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SprinKlr-8 — Schematic Reference</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Segoe UI', Arial, sans-serif; background: #0f1923; color: #dde3ec; font-size: 14px; line-height: 1.5; }
+header { background: #0d2a42; border-bottom: 3px solid #4fc3f7; padding: 20px 32px; }
+header h1 { font-size: 1.8rem; color: #4fc3f7; }
+header p  { color: #90caf9; margin-top: 4px; font-size: 0.95rem; }
+.toc { background: #0d1f30; border: 1px solid #1a3a5c; border-radius: 8px; padding: 16px 20px; margin: 20px 32px; display: inline-block; min-width: 300px; }
+.toc h3 { color: #90caf9; margin-bottom: 8px; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px; }
+.toc a { color: #4fc3f7; text-decoration: none; display: block; padding: 2px 0 2px 8px; font-size: 0.9rem; border-left: 2px solid transparent; }
+.toc a:hover { border-left-color: #4fc3f7; }
+main { padding: 0 32px 48px; max-width: 1400px; }
+h2 { color: #4fc3f7; font-size: 1.25rem; margin: 36px 0 12px; padding-bottom: 6px; border-bottom: 2px solid #1a3a5c; }
+h3 { color: #81c784; font-size: 1.05rem; margin: 22px 0 8px; }
+p { margin-bottom: 10px; color: #b0bec5; }
+table { width: 100%; border-collapse: collapse; margin: 8px 0 20px; font-size: 0.88rem; }
+th { background: #0d3a5c; color: #4fc3f7; padding: 9px 11px; text-align: left; border: 1px solid #1a4a7a; white-space: nowrap; }
+td { padding: 8px 11px; border: 1px solid #1e2e3e; vertical-align: top; }
+tr:nth-child(even) td { background: #0a1620; }
+tr:hover td { background: #112233; }
+.ref  { color: #ce93d8; font-family: monospace; font-weight: bold; font-size: 0.92rem; }
+.lcsc { color: #ffb74d; font-family: monospace; font-weight: bold; }
+.net  { color: #4fc3f7; font-family: monospace; font-size: 0.88rem; }
+.pin  { color: #a5d6a7; font-family: monospace; font-size: 0.85rem; }
+.pkg  { color: #90caf9; font-size: 0.82rem; }
+.note { color: #b0bec5; font-size: 0.85rem; }
+.warn { background: #2a1000; border-left: 4px solid #ff7043; padding: 12px 16px; margin: 12px 0; border-radius: 0 6px 6px 0; }
+.warn strong { color: #ff7043; }
+.info { background: #001a30; border-left: 4px solid #4fc3f7; padding: 12px 16px; margin: 12px 0; border-radius: 0 6px 6px 0; }
+.info strong { color: #4fc3f7; }
+.tip  { background: #001a00; border-left: 4px solid #81c784; padding: 12px 16px; margin: 12px 0; border-radius: 0 6px 6px 0; }
+.tip strong { color: #81c784; }
+code { background: #0a1620; padding: 2px 6px; border-radius: 3px; font-family: monospace; color: #a5d6a7; font-size: 0.88rem; }
+.block-badge { display: inline-block; background: #0d3a5c; color: #4fc3f7; border: 1px solid #1a4a7a; border-radius: 12px; padding: 2px 10px; font-size: 0.78rem; font-weight: 700; margin-right: 6px; white-space: nowrap; }
+.net-section { background: #0a1825; border: 1px solid #1a2e40; border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+.net-section h3 { margin-top: 0; }
+.net-row { display: flex; gap: 8px; align-items: flex-start; padding: 5px 0; border-bottom: 1px solid #0f1f2f; }
+.net-row:last-child { border-bottom: none; }
+.net-name { min-width: 160px; color: #4fc3f7; font-family: monospace; font-weight: bold; font-size: 0.88rem; flex-shrink: 0; }
+.net-pins { color: #dde3ec; font-size: 0.85rem; flex: 1; }
+.net-pins span { display: inline-block; background: #0d2233; border: 1px solid #1a3a5c; border-radius: 4px; padding: 1px 7px; margin: 2px 3px 2px 0; font-family: monospace; font-size: 0.82rem; color: #a5d6a7; }
+.gpio-table td:nth-child(1) { font-family: monospace; color: #ce93d8; }
+.gpio-table td:nth-child(2) { color: #4fc3f7; }
+svg text { fill: #dde3ec; }
+@media print {
+  body { background: white; color: #111; }
+  th { background: #dde; color: #111; }
+  .net-section { background: #f8f8f8; border-color: #ccc; }
+  td { border-color: #ccc; }
+  .warn { background: #fff3f0; }
+  .info { background: #f0f8ff; }
+  .tip  { background: #f0fff0; }
+  .net-pins span { background: #eee; border-color: #ccc; color: #333; }
+  .net-name, .pin, .ref, .lcsc, code { color: #111; }
+  a { color: #111; }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>💧 SprinKlr-8 — Schematic Reference</h1>
+  <p>8-Zone ESP32 WiFi Sprinkler Controller &nbsp;|&nbsp; EasyEDA Standard Entry Guide &nbsp;|&nbsp; Version 1.0 &nbsp;|&nbsp; May 2026</p>
+</header>
+
+<div class="toc">
+  <h3>Contents</h3>
+  <a href="#how-to-use">How to use this document</a>
+  <a href="#components">1. Component List</a>
+  <a href="#netlist">2. Complete Net List</a>
+  <a href="#gpio">3. GPIO Assignment Summary</a>
+  <a href="#power">4. Power Architecture</a>
+  <a href="#auto-reset">5. Auto-Reset Circuit Detail</a>
+  <a href="#relay-circuit">6. Relay + LED Circuit Detail</a>
+  <a href="#easyeda-tips">7. EasyEDA Entry Tips</a>
+</div>
+
+<main>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<h2 id="how-to-use">How to Use This Document</h2>
+
+<div class="info">
+  <strong>Workflow:</strong> Open EasyEDA Standard → New Project → New Schematic. Work through each functional block below. For every component, search EasyEDA's library by the LCSC part number (e.g., <code>C84681</code>) — this finds the exact symbol with the correct footprint already attached. Use the Net List section to wire every pin. Use net labels (Place → Net Label) instead of drawing long wires across the sheet — they keep the schematic readable.
+</div>
+
+<div class="tip">
+  <strong>Tip:</strong> In EasyEDA Standard, press <code>W</code> to place a wire, <code>N</code> to place a net label, <code>P</code> to open the component library search. Searching by LCSC C-number finds the exact part. Use <code>R</code> to rotate components while placing.
+</div>
+
+<div class="warn">
+  <strong>Critical — Do not substitute these parts:</strong> Use <strong>C165255</strong> for the HF46F relay. C128511 is a capacitor and C22363895 is a through-hole relay — EasyEDA search results may show these by mistake. Verify the part description before placing.
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<h2 id="components">1. Component List</h2>
+
+<p>All components are available on LCSC. Search EasyEDA library by the LCSC C-number for exact symbol + footprint match. Prefer "Basic" parts to avoid JLCPCB extended component surcharges.</p>
+
+<h3>ICs &amp; Modules</h3>
+<table>
+  <tr><th>Ref</th><th>Description</th><th>LCSC</th><th>Package</th><th>Qty</th><th>Notes</th></tr>
+  <tr><td class="ref">U1</td><td>ESP32-WROOM-32E module</td><td class="lcsc">C701341</td><td class="pkg">Module 38-pad castellated</td><td>1</td><td class="note">4MB flash. Antenna faces board edge. Keep-out 15mm around antenna.</td></tr>
+  <tr><td class="ref">U2</td><td>CH340C USB-UART converter</td><td class="lcsc">C84681</td><td class="pkg">SOP-16</td><td>1</td><td class="note">Internal oscillator — no external crystal. Do NOT add crystal.</td></tr>
+  <tr><td class="ref">U3</td><td>AMS1117-3.3 LDO regulator</td><td class="lcsc">C6186</td><td class="pkg">SOT-223</td><td>1</td><td class="note">3.3V output. Input from +5V rail.</td></tr>
+  <tr><td class="ref">U4</td><td>LM2596S-5.0 buck converter</td><td class="lcsc">C2621</td><td class="pkg">TO-263-5</td><td>1</td><td class="note">Fixed 5V, 3A, 40V input max. Keep switching loop tight.</td></tr>
+  <tr><td class="ref">U5</td><td>ULN2803A Darlington array</td><td class="lcsc">C56026</td><td class="pkg">SOP-18</td><td>1</td><td class="note">8-ch, internal flyback diodes. COM pin (10) MUST connect to +5V.</td></tr>
+</table>
+
+<h3>Discrete Semiconductors</h3>
+<table>
+  <tr><th>Ref</th><th>Description</th><th>LCSC</th><th>Package</th><th>Qty</th><th>Notes</th></tr>
+  <tr><td class="ref">D1</td><td>MB10F bridge rectifier</td><td class="lcsc">C441951</td><td class="pkg">MBS (SMD)</td><td>1</td><td class="note">1A, 1000V. 24VAC in → ~33V DC out.</td></tr>
+  <tr><td class="ref">D2</td><td>1N5822 Schottky diode</td><td class="lcsc">Verify on LCSC</td><td class="pkg">DO-201AD or SMD</td><td>1</td><td class="note">LM2596 catch diode. 3A, 40V. Cathode to LM2596 OUTPUT pin.</td></tr>
+  <tr><td class="ref">D3</td><td>USBLC6-2SC6 USB ESD protection</td><td class="lcsc">C2827693</td><td class="pkg">SOT-23-6</td><td>1</td><td class="note">On USB D+/D- between connector and CH340C.</td></tr>
+  <tr><td class="ref">Q1</td><td>MMBT3904 NPN transistor (RTS→EN)</td><td class="lcsc">C20526</td><td class="pkg">SOT-23</td><td>1</td><td class="note">Auto-reset. RTS# from CH340C → base. Collector → ESP32 EN.</td></tr>
+  <tr><td class="ref">Q2</td><td>MMBT3904 NPN transistor (DTR→IO0)</td><td class="lcsc">C20526</td><td class="pkg">SOT-23</td><td>1</td><td class="note">Auto-reset. DTR# from CH340C → base. Collector → ESP32 IO0.</td></tr>
+  <tr><td class="ref">K1–K8</td><td>HF46F-G/5-HS1 relay, 5V SMD</td><td class="lcsc">C165255</td><td class="pkg">SMD (G5NB footprint)</td><td>8</td><td class="note">SPST-NO, 5A/250VAC contacts. Coil+ to +5V. Coil− to ULN2803A output.</td></tr>
+  <tr><td class="ref">LED1–LED8</td><td>Red LED 0805</td><td class="lcsc">C84256</td><td class="pkg">0805</td><td>8</td><td class="note">Zone ON indicators. Anode to +5V via 470Ω. Cathode to relay driver net.</td></tr>
+  <tr><td class="ref">LED9</td><td>Green LED 0805</td><td class="lcsc">C72043</td><td class="pkg">0805</td><td>1</td><td class="note">Status indicator. GPIO23 → 330Ω → anode. Cathode to GND.</td></tr>
+  <tr><td class="ref">RV1–RV8</td><td>MOV 47V disc snubber</td><td class="lcsc">Verify on LCSC (search: MOV 47V)</td><td class="pkg">Disc 5mm</td><td>8</td><td class="note">Across each relay NO contact and COM. Protects from solenoid back-EMF.</td></tr>
+</table>
+
+<h3>Connectors &amp; Switches</h3>
+<table>
+  <tr><th>Ref</th><th>Description</th><th>LCSC</th><th>Package</th><th>Qty</th><th>Notes</th></tr>
+  <tr><td class="ref">J1</td><td>USB-C receptacle 16-pin</td><td class="lcsc">C165948</td><td class="pkg">SMD 16-pin</td><td>1</td><td class="note">Verify footprint in EasyEDA. CC1, CC2 pins → 5.1kΩ to GND.</td></tr>
+  <tr><td class="ref">J2</td><td>Barrel jack 2.1mm/5.5mm</td><td class="lcsc">Verify on LCSC</td><td class="pkg">THT</td><td>1</td><td class="note">24VAC primary input. Not polarised. Centre pin = AC_LINE side.</td></tr>
+  <tr><td class="ref">J3</td><td>2-pin screw terminal 3.5mm — AC input</td><td class="lcsc">C8465</td><td class="pkg">THT 3.5mm</td><td>1</td><td class="note">Alternate 24VAC input. Label AC1, AC2.</td></tr>
+  <tr><td class="ref">J4–J11</td><td>2-pin screw terminal 3.5mm — zone outputs</td><td class="lcsc">C8465</td><td class="pkg">THT 3.5mm</td><td>8</td><td class="note">Label Z1–Z8. One pin = relay NO contact. Other pin = spare (or bridge to COM).</td></tr>
+  <tr><td class="ref">J12</td><td>2-pin screw terminal 3.5mm — common</td><td class="lcsc">C8465</td><td class="pkg">THT 3.5mm</td><td>1</td><td class="note">Label COM. Connects 24VAC return to relay contact commons.</td></tr>
+  <tr><td class="ref">JP1</td><td>3-pin header 2.54mm — PWR-SEL</td><td class="lcsc">Standard 2.54mm header</td><td class="pkg">THT 3-pin</td><td>1</td><td class="note">Pins 1-2 = barrel jack selected. Pins 2-3 = screw terminal selected.</td></tr>
+  <tr><td class="ref">SW1</td><td>BOOT push button 6mm</td><td class="lcsc">C318884</td><td class="pkg">THT 6×6mm</td><td>1</td><td class="note">IO0 to GND. Label BOOT on silkscreen.</td></tr>
+  <tr><td class="ref">SW2</td><td>RST push button 6mm</td><td class="lcsc">C318884</td><td class="pkg">THT 6×6mm</td><td>1</td><td class="note">EN to GND. Label RST on silkscreen.</td></tr>
+</table>
+
+<h3>Passives</h3>
+<table>
+  <tr><th>Ref</th><th>Value</th><th>Package</th><th>Qty</th><th>Net / Function</th></tr>
+  <tr><td class="ref">R1, R2</td><td>5.1 kΩ</td><td class="pkg">0402</td><td>2</td><td>USB-C CC1 and CC2 pins to GND (USB-PD compliance)</td></tr>
+  <tr><td class="ref">R3</td><td>10 kΩ</td><td class="pkg">0402</td><td>1</td><td>IO0 pull-up to 3.3V</td></tr>
+  <tr><td class="ref">R4</td><td>10 kΩ</td><td class="pkg">0402</td><td>1</td><td>EN pull-up to 3.3V</td></tr>
+  <tr><td class="ref">R5</td><td>10 kΩ</td><td class="pkg">0402</td><td>1</td><td>GPIO12 pull-down to GND (strapping pin — CRITICAL)</td></tr>
+  <tr><td class="ref">R6</td><td>10 kΩ</td><td class="pkg">0402</td><td>1</td><td>Q1 base resistor: CH340C RTS# → Q1 base</td></tr>
+  <tr><td class="ref">R7</td><td>10 kΩ</td><td class="pkg">0402</td><td>1</td><td>Q2 base resistor: CH340C DTR# → Q2 base</td></tr>
+  <tr><td class="ref">R8–R15</td><td>470 Ω</td><td class="pkg">0805</td><td>8</td><td>Zone LED current limit (+5V → R → LED anode, one per zone)</td></tr>
+  <tr><td class="ref">R16</td><td>330 Ω</td><td class="pkg">0805</td><td>1</td><td>Status LED current limit (GPIO23 → R16 → LED9 anode)</td></tr>
+  <tr><td class="ref">C1</td><td>470 µF 50V electrolytic</td><td class="pkg">Radial</td><td>1</td><td>Bulk filter cap on VBUS_RAW after bridge rectifier</td></tr>
+  <tr><td class="ref">C2</td><td>220 µF 10V electrolytic</td><td class="pkg">Radial</td><td>1</td><td>LM2596 output filter cap on +5V rail</td></tr>
+  <tr><td class="ref">C3</td><td>10 µF ceramic</td><td class="pkg">0603</td><td>1</td><td>AMS1117 input cap (+5V to GND)</td></tr>
+  <tr><td class="ref">C4</td><td>22 µF ceramic</td><td class="pkg">0603</td><td>1</td><td>AMS1117 output cap (+3V3 to GND)</td></tr>
+  <tr><td class="ref">C5</td><td>10 µF ceramic</td><td class="pkg">0603</td><td>1</td><td>ESP32 power decoupling (3V3)</td></tr>
+  <tr><td class="ref">C6</td><td>100 nF ceramic</td><td class="pkg">0402</td><td>1</td><td>ESP32 power decoupling (3V3), placed on second VCC pin</td></tr>
+  <tr><td class="ref">C7</td><td>100 nF ceramic</td><td class="pkg">0402</td><td>1</td><td>CH340C VCC decoupling</td></tr>
+  <tr><td class="ref">C8</td><td>100 nF ceramic</td><td class="pkg">0402</td><td>1</td><td>ULN2803A VCC decoupling</td></tr>
+  <tr><td class="ref">C9</td><td>100 nF ceramic</td><td class="pkg">0402</td><td>1</td><td>Q1 base noise filter (base to GND)</td></tr>
+  <tr><td class="ref">C10</td><td>100 nF ceramic</td><td class="pkg">0402</td><td>1</td><td>Q2 base noise filter (base to GND)</td></tr>
+  <tr><td class="ref">L1</td><td>100 µH inductor, 1A+</td><td class="pkg">SMD or THT</td><td>1</td><td>LM2596 switching inductor</td></tr>
+  <tr><td class="ref">F1</td><td>5A PTC polyfuse</td><td class="pkg">THT or SMD</td><td>1</td><td>AC input protection before bridge rectifier</td></tr>
+  <tr><td class="ref">F2</td><td>500 mA PTC polyfuse</td><td class="lcsc">C386618</td><td class="pkg">0805</td><td>1</td><td class="note">USB VBUS protection</td></tr>
+</table>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<h2 id="netlist">2. Complete Net List</h2>
+
+<p>Every net is listed below with every connected pin. Use <strong>net labels</strong> in EasyEDA rather than drawing wires across blocks — it keeps the schematic clean. Name your net labels exactly as shown in the <span class="net">NET NAME</span> column.</p>
+
+<div class="net-section">
+  <h3><span class="block-badge">POWER</span> AC Input &amp; Rectifier</h3>
+
+  <div class="net-row">
+    <div class="net-name">BARREL_HOT</div>
+    <div class="net-pins">
+      <span>J2 pin 1</span>
+      <span>JP1 pin 1</span>
+    </div>
+  </div>
+  <div class="net-row">
+    <div class="net-name">SCREW_HOT</div>
+    <div class="net-pins">
+      <span>J3 pin 1</span>
+      <span>JP1 pin 3</span>
+    </div>
+  </div>
+  <div class="net-row">
+    <div class="net-name">AC_BUS</div>
+    <div class="net-pins">
+      <span>JP1 pin 2</span>
+      <span>F1 pin 1</span>
+    </div>
+  </div>
+  <div class="net-row">
+    <div class="net-name">AC_LINE</div>
+    <div class="net-pins">
+      <span>F1 pin 2</span>
+      <span>D1 AC~ (pin 1)</span>
+    </div>
+  </div>
+  <div class="net-row">
+    <div class="net-name">AC_COM</div>
+    <div class="net-pins">
+      <span>J2 pin 2</span>
+      <span>J3 pin 2</span>
+      <span>D1 AC~ (pin 2)</span>
+      <span>J12 pin 1 (COM terminal)</span>
+      <span>K1–K8 COM contact</span>
+    </div>
+  </div>
+  <div class="net-row">
+    <div class="net-name">VBUS_RAW</div>
+    <div class="net-pins">
+      <span>D1 + (DC positive out)</span>
+      <span>C1 positive</span>
+      <span>U4 VIN (pin 2)</span>
+    </div>
+  </div>
+  <div class="net-row">
+    <div class="net-name">GND</div>
+    <div class="net-pins">
+      <span>D1 − (DC negative out)</span>
+      <span>C1 negative</span>
+      <span>U4 GND (pin 3)</span>
+      <span>U4 ON/OFF (pin 5) — tie low to enable always</span>
+      <span>D2 anode</span>
+      <span>C2 negative</span>
+      <span>U3 GND (pin 1)</span>
+      <span>C3 negative</span>
+      <span>C4 negative</span>
+      <span>U2 GND (pins 1, 8)</span>
+      <span>C7 negative</span>
+      <span>U5 GND (pin 9)</span>
+      <span>C8 negative</span>
+      <span>U1 GND (all GND pads)</span>
+      <span>C5 negative</span>
+      <span>C6 negative</span>
+      <span>R1 pin 2 (CC1)</span>
+      <span>R2 pin 2 (CC2)</span>
+      <span>Q1 emitter</span>
+      <span>Q2 emitter</span>
+      <span>C9 negative</span>
+      <span>C10 negative</span>
+      <span>R5 pin 2 (GPIO12 pull-down)</span>
+      <span>LED9 cathode</span>
+      <span>SW1 pin 2</span>
+      <span>SW2 pin 2</span>
+    </div>
+  </div>
+</div>
+
+<div class="net-section">
+  <h3><span class="block-badge">POWER</span> 5V Buck Converter (LM2596)</h3>
+  <p class="note" style="margin-bottom:10px">Keep the switching loop (U4 OUT → D2 cathode, L1, C2) physically tight on the PCB. Do not run sensitive signal traces nearby.</p>
+
+  <div class="net-row">
+    <div class="net-name">LM2596_SW</div>
+    <div class="net-pins">
+      <span>U4 OUTPUT (pin 1)</span>
+      <span>D2 cathode</span>
+      <span>L1 pin 1</span>
+    </div>
+  </div>
+  <div class="net-row">
+    <div class="net-name">+5V</div>
+    <div class="net-pins">
+      <span>L1 pin 2</span>
+      <span>C2 positive</span>
+      <span>U4 FEEDBACK (pin 4)</span>
+      <span>U3 IN (pin 3)</span>
+      <span>C3 positive</span>
+      <span>U2 VCC (pin 15)</span>
+      <span>C7 positive</span>
+      <span>U5 COM (pin 10) — MUST connect, flyback return</span>
+      <span>C8 positive</span>
+      <span>K1 coil+ · K2 coil+ · K3 coil+ · K4 coil+</span>
+      <span>K5 coil+ · K6 coil+ · K7 coil+ · K8 coil+</span>
+      <span>R8 pin 1 (Z1 LED)</span>
+      <span>R9 pin 1 (Z2 LED)</span>
+      <span>R10 pin 1 (Z3 LED)</span>
+      <span>R11 pin 1 (Z4 LED)</span>
+      <span>R12 pin 1 (Z5 LED)</span>
+      <span>R13 pin 1 (Z6 LED)</span>
+      <span>R14 pin 1 (Z7 LED)</span>
+      <span>R15 pin 1 (Z8 LED)</span>
+      <span>F2 pin 1 (USB VBUS in)</span>
+    </div>
+  </div>
+  <div class="net-row">
+    <div class="net-name">USB_VBUS</div>
+    <div class="net-pins">
+      <span>J1 VBUS pin</span>
+      <span>F2 pin 1</span>
+      <span>F2 pin 2 → +5V rail</span>
+      <span>D3 VBUS pin</span>
+    </div>
+  </div>
+</div>
+
+<div class="net-section">
+  <h3><span class="block-badge">POWER</span> 3.3V LDO (AMS1117)</h3>
+
+  <div class="net-row">
+    <div class="net-name">+3V3</div>
+    <div class="net-pins">
+      <span>U3 OUT (pin 2 and pin 4 / tab)</span>
+      <span>C4 positive</span>
+      <span>U1 3V3 (power pins)</span>
+      <span>C5 positive</span>
+      <span>C6 positive</span>
+      <span>R3 pin 2 (IO0 pull-up)</span>
+      <span>R4 pin 2 (EN pull-up)</span>
+      <span>U2 V3 pin (pin 4, CH340C I/O voltage)</span>
+    </div>
+  </div>
+</div>
+
+<div class="net-section">
+  <h3><span class="block-badge">USB</span> USB-C Connector &amp; ESD</h3>
+
+  <div class="net-row">
+    <div class="net-name">USB_DP_RAW</div>
+    <div class="net-pins">
+      <span>J1 D+ pin</span>
+      <span>D3 I/O1 (D+ side)</span>
+    </div>
+  </div>
+  <div class="net-row">
+    <div class="net-name">USB_DM_RAW</div>
+    <div class="net-pins">
+      <span>J1 D− pin</span>
+      <span>D3 I/O2 (D− side)</span>
+    </div>
+  </div>
+  <div class="net-row">
+    <div class="net-name">USB_DP</div>
+    <div class="net-pins">
+      <span>D3 I/O3 (protected D+ out)</span>
+      <span>U2 UD+ (pin 5)</span>
+    </div>
+  </div>
+  <div class="net-row">
+    <div class="net-name">USB_DM</div>
+    <div class="net-pins">
+      <span>D3 I/O4 (protected D− out)</span>
+      <span>U2 UD− (pin 6)</span>
+    </div>
+  </div>
+  <div class="net-row">
+    <div class="net-name">USB_CC1</div>
+    <div class="net-pins">
+      <span>J1 CC1 pin</span>
+      <span>R1 pin 1</span>
+      <span>R1 pin 2 → GND</span>
+    </div>
+  </div>
+  <div class="net-row">
+    <div class="net-name">USB_CC2</div>
+    <div class="net-pins">
+      <span>J1 CC2 pin</span>
+      <span>R2 pin 1</span>
+      <span>R2 pin 2 → GND</span>
+    </div>
+  </div>
+</div>
+
+<div class="net-section">
+  <h3><span class="block-badge">USB/UART</span> CH340C &amp; Auto-Reset</h3>
+
+  <div class="net-row">
+    <div class="net-name">ESP_TX</div>
+    <div class="net-pins">
+      <span>U1 GPIO1/TXD0 (pin 30)</span>
+      <span>U2 RXD (pin 3)</span>
+    </div>
+  </div>
+  <div class="net-row">
+    <div class="net-name">ESP_RX</div>
+    <div class="net-pins">
+      <span>U1 GPIO3/RXD0 (pin 29)</span>
+      <span>U2 TXD (pin 2)</span>
+    </div>
+  </div>
+  <div class="net-row">
+    <div class="net-name">CH340_RTS</div>
+    <div class="net-pins">
+      <span>U2 RTS# (pin 14)</span>
+      <span>R6 pin 1</span>
+      <span>C9 positive</span>
+    </div>
+  </div>
+  <div class="net-row">
+    <div class="net-name">CH340_DTR</div>
+    <div class="net-pins">
+      <span>U2 DTR# (pin 13)</span>
+      <span>R7 pin 1</span>
+      <span>C10 positive</span>
+    </div>
+  </div>
+  <div class="net-row">
+    <div class="net-name">Q1_BASE</div>
+    <div class="net-pins">
+      <span>R6 pin 2</span>
+      <span>Q1 base</span>
+      <span>C9 negative → GND</span>
+    </div>
+  </div>
+  <div class="net-row">
+    <div class="net-name">Q2_BASE</div>
+    <div class="net-pins">
+      <span>R7 pin 2</span>
+      <span>Q2 base</span>
+      <span>C10 negative → GND</span>
+    </div>
+  </div>
+</div>
+
+<div class="net-section">
+  <h3><span class="block-badge">ESP32</span> Reset, Boot &amp; Strapping Pins</h3>
+
+  <div class="net-row">
+    <div class="net-name">ESP_EN</div>
+    <div class="net-pins">
+      <span>U1 EN (pin 3)</span>
+      <span>R4 pin 1</span>
+      <span>Q1 collector</span>
+      <span>SW2 pin 1</span>
+    </div>
+  </div>
+  <div class="net-row">
+    <div class="net-name">ESP_IO0</div>
+    <div class="net-pins">
+      <span>U1 GPIO0/IO0 (pin 20)</span>
+      <span>R3 pin 1</span>
+      <span>Q2 collector</span>
+      <span>SW1 pin 1</span>
+    </div>
+  </div>
+  <div class="net-row">
+    <div class="net-name">GPIO12_ZONE7</div>
+    <div class="net-pins">
+      <span>U1 GPIO12 (pin 14)</span>
+      <span>U5 IN7 (pin 7)</span>
+      <span>R5 pin 1</span>
+      <span>R5 pin 2 → GND (pull-down — CRITICAL for boot)</span>
+    </div>
+  </div>
+</div>
+
+<div class="net-section">
+  <h3><span class="block-badge">RELAY</span> Zone GPIO Lines (ESP32 → ULN2803A)</h3>
+
+  <div class="net-row"><div class="net-name">GPIO32_ZONE1</div><div class="net-pins"><span>U1 GPIO32 (pin 8)</span><span>U5 IN1 (pin 1)</span></div></div>
+  <div class="net-row"><div class="net-name">GPIO33_ZONE2</div><div class="net-pins"><span>U1 GPIO33 (pin 9)</span><span>U5 IN2 (pin 2)</span></div></div>
+  <div class="net-row"><div class="net-name">GPIO25_ZONE3</div><div class="net-pins"><span>U1 GPIO25 (pin 10)</span><span>U5 IN3 (pin 3)</span></div></div>
+  <div class="net-row"><div class="net-name">GPIO26_ZONE4</div><div class="net-pins"><span>U1 GPIO26 (pin 11)</span><span>U5 IN4 (pin 4)</span></div></div>
+  <div class="net-row"><div class="net-name">GPIO27_ZONE5</div><div class="net-pins"><span>U1 GPIO27 (pin 12)</span><span>U5 IN5 (pin 5)</span></div></div>
+  <div class="net-row"><div class="net-name">GPIO14_ZONE6</div><div class="net-pins"><span>U1 GPIO14 (pin 13)</span><span>U5 IN6 (pin 6)</span></div></div>
+  <div class="net-row"><div class="net-name">GPIO13_ZONE8</div><div class="net-pins"><span>U1 GPIO13 (pin 16)</span><span>U5 IN8 (pin 8)</span></div></div>
+</div>
+
+<div class="net-section">
+  <h3><span class="block-badge">RELAY</span> Driver Outputs — Relay Coils &amp; Zone LEDs</h3>
+  <p class="note" style="margin-bottom:10px">Each RELAY_DRV_N net is the collector of the ULN2803A output. When driven HIGH by the ESP32, the ULN2803A pulls this net LOW, energising the relay coil and lighting the zone LED simultaneously.</p>
+
+  <div class="net-row"><div class="net-name">RELAY_DRV_1</div><div class="net-pins"><span>U5 OUT1 (pin 18)</span><span>K1 coil− (pin A2)</span><span>R8 pin 2</span><span>LED1 anode (R8→LED1 in series, R8 pin 1 to +5V)</span></div></div>
+  <div class="net-row"><div class="net-name">RELAY_DRV_2</div><div class="net-pins"><span>U5 OUT2 (pin 17)</span><span>K2 coil−</span><span>R9 pin 2</span><span>LED2 anode</span></div></div>
+  <div class="net-row"><div class="net-name">RELAY_DRV_3</div><div class="net-pins"><span>U5 OUT3 (pin 16)</span><span>K3 coil−</span><span>R10 pin 2</span><span>LED3 anode</span></div></div>
+  <div class="net-row"><div class="net-name">RELAY_DRV_4</div><div class="net-pins"><span>U5 OUT4 (pin 15)</span><span>K4 coil−</span><span>R11 pin 2</span><span>LED4 anode</span></div></div>
+  <div class="net-row"><div class="net-name">RELAY_DRV_5</div><div class="net-pins"><span>U5 OUT5 (pin 14)</span><span>K5 coil−</span><span>R12 pin 2</span><span>LED5 anode</span></div></div>
+  <div class="net-row"><div class="net-name">RELAY_DRV_6</div><div class="net-pins"><span>U5 OUT6 (pin 13)</span><span>K6 coil−</span><span>R13 pin 2</span><span>LED6 anode</span></div></div>
+  <div class="net-row"><div class="net-name">RELAY_DRV_7</div><div class="net-pins"><span>U5 OUT7 (pin 12)</span><span>K7 coil−</span><span>R14 pin 2</span><span>LED7 anode</span></div></div>
+  <div class="net-row"><div class="net-name">RELAY_DRV_8</div><div class="net-pins"><span>U5 OUT8 (pin 11)</span><span>K8 coil−</span><span>R15 pin 2</span><span>LED8 anode</span></div></div>
+</div>
+
+<div class="net-section">
+  <h3><span class="block-badge">RELAY</span> Zone Output Contacts (24VAC switching)</h3>
+  <p class="note" style="margin-bottom:10px">Each relay NO contact switches 24VAC from the COM bus to the zone solenoid valve. MOV snubbers connect across the solenoid load (at the screw terminals) to suppress back-EMF spikes.</p>
+
+  <div class="net-row"><div class="net-name">ZONE1_OUT</div><div class="net-pins"><span>K1 NO contact</span><span>J4 pin 1 (Z1 screw terminal)</span><span>RV1 pin 1</span></div></div>
+  <div class="net-row"><div class="net-name">ZONE2_OUT</div><div class="net-pins"><span>K2 NO contact</span><span>J5 pin 1 (Z2 terminal)</span><span>RV2 pin 1</span></div></div>
+  <div class="net-row"><div class="net-name">ZONE3_OUT</div><div class="net-pins"><span>K3 NO contact</span><span>J6 pin 1 (Z3 terminal)</span><span>RV3 pin 1</span></div></div>
+  <div class="net-row"><div class="net-name">ZONE4_OUT</div><div class="net-pins"><span>K4 NO contact</span><span>J7 pin 1 (Z4 terminal)</span><span>RV4 pin 1</span></div></div>
+  <div class="net-row"><div class="net-name">ZONE5_OUT</div><div class="net-pins"><span>K5 NO contact</span><span>J8 pin 1 (Z5 terminal)</span><span>RV5 pin 1</span></div></div>
+  <div class="net-row"><div class="net-name">ZONE6_OUT</div><div class="net-pins"><span>K6 NO contact</span><span>J9 pin 1 (Z6 terminal)</span><span>RV6 pin 1</span></div></div>
+  <div class="net-row"><div class="net-name">ZONE7_OUT</div><div class="net-pins"><span>K7 NO contact</span><span>J10 pin 1 (Z7 terminal)</span><span>RV7 pin 1</span></div></div>
+  <div class="net-row"><div class="net-name">ZONE8_OUT</div><div class="net-pins"><span>K8 NO contact</span><span>J11 pin 1 (Z8 terminal)</span><span>RV8 pin 1</span></div></div>
+
+  <div class="net-row">
+    <div class="net-name">AC_COM</div>
+    <div class="net-pins">
+      <span>J12 pin 1 (COM screw terminal)</span>
+      <span>K1–K8 COM contacts (all 8)</span>
+      <span>RV1–RV8 pin 2 (all 8 MOV second pins)</span>
+      <span>J4–J11 pin 2 (second pin of all zone terminals — connects COM to every zone connector)</span>
+    </div>
+  </div>
+</div>
+
+<div class="net-section">
+  <h3><span class="block-badge">LED</span> Status LED</h3>
+  <div class="net-row">
+    <div class="net-name">STATUS_LED_A</div>
+    <div class="net-pins">
+      <span>U1 GPIO23 (pin 32)</span>
+      <span>R16 pin 1</span>
+    </div>
+  </div>
+  <div class="net-row">
+    <div class="net-name">STATUS_LED_K</div>
+    <div class="net-pins">
+      <span>R16 pin 2</span>
+      <span>LED9 anode</span>
+    </div>
+  </div>
+  <div class="net-row">
+    <div class="net-name">GND</div>
+    <div class="net-pins">
+      <span>LED9 cathode → GND</span>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<h2 id="gpio">3. GPIO Assignment Summary</h2>
+
+<table class="gpio-table">
+  <tr><th>GPIO</th><th>Net Label</th><th>Direction</th><th>Connected To</th><th>Notes</th></tr>
+  <tr><td>GPIO32</td><td class="net">GPIO32_ZONE1</td><td>Output</td><td>U5 IN1 (pin 1)</td><td></td></tr>
+  <tr><td>GPIO33</td><td class="net">GPIO33_ZONE2</td><td>Output</td><td>U5 IN2 (pin 2)</td><td></td></tr>
+  <tr><td>GPIO25</td><td class="net">GPIO25_ZONE3</td><td>Output</td><td>U5 IN3 (pin 3)</td><td></td></tr>
+  <tr><td>GPIO26</td><td class="net">GPIO26_ZONE4</td><td>Output</td><td>U5 IN4 (pin 4)</td><td></td></tr>
+  <tr><td>GPIO27</td><td class="net">GPIO27_ZONE5</td><td>Output</td><td>U5 IN5 (pin 5)</td><td></td></tr>
+  <tr><td>GPIO14</td><td class="net">GPIO14_ZONE6</td><td>Output</td><td>U5 IN6 (pin 6)</td><td></td></tr>
+  <tr><td>GPIO12</td><td class="net">GPIO12_ZONE7</td><td>Output</td><td>U5 IN7 (pin 7) + R5 10kΩ → GND</td><td style="color:#ff7043;font-weight:bold">STRAPPING PIN — pull-down R5 mandatory</td></tr>
+  <tr><td>GPIO13</td><td class="net">GPIO13_ZONE8</td><td>Output</td><td>U5 IN8 (pin 8)</td><td></td></tr>
+  <tr><td>GPIO23</td><td class="net">STATUS_LED_A</td><td>Output</td><td>R16 → LED9 anode → GND</td><td>Active HIGH, green LED</td></tr>
+  <tr><td>GPIO1 (TXD0)</td><td class="net">ESP_TX</td><td>Output</td><td>U2 RXD (CH340C pin 3)</td><td>UART TX</td></tr>
+  <tr><td>GPIO3 (RXD0)</td><td class="net">ESP_RX</td><td>Input</td><td>U2 TXD (CH340C pin 2)</td><td>UART RX</td></tr>
+  <tr><td>GPIO0 (IO0)</td><td class="net">ESP_IO0</td><td>I/O</td><td>R3 → +3V3, Q2 collector, SW1 → GND</td><td>LOW at reset = bootloader mode</td></tr>
+  <tr><td>EN</td><td class="net">ESP_EN</td><td>Input</td><td>R4 → +3V3, Q1 collector, SW2 → GND</td><td>Active HIGH enable, LOW = reset</td></tr>
+</table>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<h2 id="power">4. Power Architecture</h2>
+
+<svg viewBox="0 0 820 260" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:820px;margin:12px 0;background:#0a1420;border-radius:8px;padding:8px">
+  <!-- 24VAC input -->
+  <rect x="10" y="90" width="100" height="50" rx="6" fill="#1a2a3a" stroke="#4fc3f7" stroke-width="1.5"/>
+  <text x="60" y="111" text-anchor="middle" font-size="11" fill="#4fc3f7">24VAC</text>
+  <text x="60" y="127" text-anchor="middle" font-size="10" fill="#90caf9">Barrel / Screw</text>
+  <!-- Arrow -->
+  <line x1="110" y1="115" x2="145" y2="115" stroke="#607080" stroke-width="1.5" marker-end="url(#arr)"/>
+  <!-- F1 polyfuse -->
+  <rect x="145" y="100" width="55" height="30" rx="4" fill="#1a2a3a" stroke="#ffb74d" stroke-width="1.5"/>
+  <text x="172" y="120" text-anchor="middle" font-size="11" fill="#ffb74d">F1 5A</text>
+  <line x1="200" y1="115" x2="225" y2="115" stroke="#607080" stroke-width="1.5" marker-end="url(#arr)"/>
+  <!-- MB10F -->
+  <rect x="225" y="90" width="80" height="50" rx="6" fill="#1a2a3a" stroke="#81c784" stroke-width="1.5"/>
+  <text x="265" y="111" text-anchor="middle" font-size="11" fill="#81c784">D1 MB10F</text>
+  <text x="265" y="127" text-anchor="middle" font-size="10" fill="#90caf9">Bridge Rect.</text>
+  <line x1="305" y1="115" x2="330" y2="115" stroke="#607080" stroke-width="1.5" marker-end="url(#arr)"/>
+  <!-- C1 -->
+  <line x1="340" y1="90" x2="340" y2="140" stroke="#ce93d8" stroke-width="2"/>
+  <text x="340" y="82" text-anchor="middle" font-size="10" fill="#ce93d8">C1 470µF</text>
+  <!-- LM2596 -->
+  <rect x="330" y="90" width="80" height="50" rx="6" fill="#1a2a3a" stroke="#4fc3f7" stroke-width="1.5"/>
+  <text x="370" y="108" text-anchor="middle" font-size="10" fill="#ce93d8">~33V DC</text>
+  <text x="370" y="122" text-anchor="middle" font-size="10" fill="#90caf9">VBUS_RAW</text>
+  <line x1="410" y1="115" x2="435" y2="115" stroke="#607080" stroke-width="1.5" marker-end="url(#arr)"/>
+  <!-- LM2596 block -->
+  <rect x="435" y="80" width="100" height="70" rx="6" fill="#1a2a3a" stroke="#ffb74d" stroke-width="1.5"/>
+  <text x="485" y="103" text-anchor="middle" font-size="11" fill="#ffb74d">U4 LM2596</text>
+  <text x="485" y="118" text-anchor="middle" font-size="10" fill="#90caf9">Buck 5V/3A</text>
+  <text x="485" y="133" text-anchor="middle" font-size="10" fill="#90caf9">L1 + D2 + C2</text>
+  <line x1="535" y1="115" x2="560" y2="115" stroke="#607080" stroke-width="1.5" marker-end="url(#arr)"/>
+  <!-- 5V rail label -->
+  <rect x="560" y="96" width="60" height="38" rx="4" fill="#0d3a0d" stroke="#81c784" stroke-width="1.5"/>
+  <text x="590" y="112" text-anchor="middle" font-size="12" fill="#81c784" font-weight="bold">+5V</text>
+  <text x="590" y="127" text-anchor="middle" font-size="10" fill="#a5d6a7">3A max</text>
+  <!-- 5V → AMS1117 -->
+  <line x1="620" y1="115" x2="640" y2="115" stroke="#607080" stroke-width="1.5" marker-end="url(#arr)"/>
+  <!-- AMS1117 -->
+  <rect x="640" y="90" width="80" height="50" rx="6" fill="#1a2a3a" stroke="#ffb74d" stroke-width="1.5"/>
+  <text x="680" y="108" text-anchor="middle" font-size="11" fill="#ffb74d">U3 AMS1117</text>
+  <text x="680" y="123" text-anchor="middle" font-size="10" fill="#90caf9">LDO 3.3V</text>
+  <line x1="720" y1="115" x2="745" y2="115" stroke="#607080" stroke-width="1.5" marker-end="url(#arr)"/>
+  <!-- 3V3 rail -->
+  <rect x="745" y="96" width="65" height="38" rx="4" fill="#0d2a3a" stroke="#4fc3f7" stroke-width="1.5"/>
+  <text x="778" y="112" text-anchor="middle" font-size="12" fill="#4fc3f7" font-weight="bold">+3.3V</text>
+  <text x="778" y="127" text-anchor="middle" font-size="10" fill="#90caf9">ESP32</text>
+  <!-- consumers at bottom -->
+  <text x="590" y="160" text-anchor="middle" font-size="10" fill="#81c784">→ Relay coils × 8</text>
+  <text x="590" y="174" text-anchor="middle" font-size="10" fill="#81c784">→ ULN2803A COM</text>
+  <text x="590" y="188" text-anchor="middle" font-size="10" fill="#81c784">→ Zone LEDs × 8</text>
+  <text x="590" y="202" text-anchor="middle" font-size="10" fill="#81c784">→ CH340C VCC</text>
+  <text x="778" y="160" text-anchor="middle" font-size="10" fill="#4fc3f7">→ ESP32 VCC</text>
+  <text x="778" y="174" text-anchor="middle" font-size="10" fill="#4fc3f7">→ Pull-ups R3, R4</text>
+  <text x="778" y="188" text-anchor="middle" font-size="10" fill="#4fc3f7">→ CH340C V3 pin</text>
+  <!-- USB path -->
+  <rect x="10" y="185" width="100" height="40" rx="6" fill="#1a2a3a" stroke="#ce93d8" stroke-width="1.5"/>
+  <text x="60" y="201" text-anchor="middle" font-size="11" fill="#ce93d8">USB-C 5V</text>
+  <text x="60" y="217" text-anchor="middle" font-size="10" fill="#90caf9">VBUS via F2</text>
+  <line x1="110" y1="205" x2="555" y2="205" stroke="#ce93d8" stroke-width="1" stroke-dasharray="4,3"/>
+  <line x1="555" y1="205" x2="555" y2="133" stroke="#ce93d8" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#arr2)"/>
+  <text x="320" y="200" text-anchor="middle" font-size="10" fill="#ce93d8">Feeds +5V rail when AC unavailable</text>
+  <!-- arrow defs -->
+  <defs>
+    <marker id="arr" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#607080"/>
+    </marker>
+    <marker id="arr2" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#ce93d8"/>
+    </marker>
+  </defs>
+</svg>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<h2 id="auto-reset">5. Auto-Reset Circuit Detail</h2>
+
+<p>This circuit allows the Arduino IDE and esptool to automatically reset the ESP32 into bootloader mode before flashing — no manual button pressing required. Replicate exactly as shown.</p>
+
+<table>
+  <tr><th>Pin</th><th>CH340C Signal</th><th>Transistor</th><th>ESP32 Target</th><th>Effect</th></tr>
+  <tr>
+    <td><span class="ref">Q1</span></td>
+    <td>RTS# → R6 (10kΩ) → Q1 base<br><span class="note">C9 100nF from base to GND</span></td>
+    <td>MMBT3904 NPN<br>Emitter → GND</td>
+    <td>Collector → <span class="net">ESP_EN</span></td>
+    <td>RTS# low → Q1 conducts → EN pulled low → ESP32 resets</td>
+  </tr>
+  <tr>
+    <td><span class="ref">Q2</span></td>
+    <td>DTR# → R7 (10kΩ) → Q2 base<br><span class="note">C10 100nF from base to GND</span></td>
+    <td>MMBT3904 NPN<br>Emitter → GND</td>
+    <td>Collector → <span class="net">ESP_IO0</span></td>
+    <td>DTR# low → Q2 conducts → IO0 pulled low → ESP32 enters bootloader</td>
+  </tr>
+</table>
+
+<div class="info">
+  <strong>Sequence:</strong> esptool pulses RTS and DTR together in a specific pattern to first assert reset with IO0 low, then release reset — the ESP32 boots into the bootloader and is ready to accept firmware. EN and IO0 have 10kΩ pull-ups to +3.3V (R4 and R3) that return them high when neither button nor transistor is pulling them low.
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<h2 id="relay-circuit">6. Relay + LED Circuit Detail</h2>
+
+<p>The zone LED and relay coil share the same driver net. When the ULN2803A output is pulled low (zone active), current flows through both the relay coil and the LED simultaneously.</p>
+
+<svg viewBox="0 0 540 200" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:540px;margin:12px 0;background:#0a1420;border-radius:8px;padding:8px">
+  <!-- +5V -->
+  <text x="30" y="30" font-size="11" fill="#81c784" font-weight="bold">+5V</text>
+  <line x1="30" y1="35" x2="30" y2="60" stroke="#81c784" stroke-width="1.5"/>
+  <!-- Split -->
+  <line x1="30" y1="60" x2="120" y2="60" stroke="#81c784" stroke-width="1.5"/>
+  <line x1="30" y1="60" x2="30" y2="120" stroke="#81c784" stroke-width="1.5"/>
+  <!-- R8 + LED branch -->
+  <rect x="90" y="50" width="50" height="20" rx="3" fill="#1a2a3a" stroke="#ffb74d" stroke-width="1.5"/>
+  <text x="115" y="63" text-anchor="middle" font-size="10" fill="#ffb74d">R8 470Ω</text>
+  <line x1="140" y1="60" x2="175" y2="60" stroke="#81c784" stroke-width="1.5"/>
+  <!-- LED -->
+  <polygon points="175,50 175,70 195,60" fill="#ef5350" stroke="#ef5350"/>
+  <line x1="195" y1="50" x2="195" y2="70" stroke="#ef5350" stroke-width="2"/>
+  <line x1="195" y1="60" x2="230" y2="60" stroke="#4fc3f7" stroke-width="1.5"/>
+  <!-- Relay coil branch -->
+  <line x1="30" y1="120" x2="90" y2="120" stroke="#81c784" stroke-width="1.5"/>
+  <text x="70" y="113" text-anchor="middle" font-size="9" fill="#90caf9">Coil +</text>
+  <rect x="90" y="105" width="50" height="30" rx="3" fill="#1a2a3a" stroke="#4fc3f7" stroke-width="1.5"/>
+  <text x="115" y="118" text-anchor="middle" font-size="9" fill="#4fc3f7">K1</text>
+  <text x="115" y="130" text-anchor="middle" font-size="9" fill="#90caf9">Coil</text>
+  <line x1="140" y1="120" x2="230" y2="120" stroke="#4fc3f7" stroke-width="1.5"/>
+  <text x="185" y="113" text-anchor="middle" font-size="9" fill="#90caf9">Coil −</text>
+  <!-- Join at RELAY_DRV_1 -->
+  <line x1="230" y1="60" x2="230" y2="120" stroke="#4fc3f7" stroke-width="1.5"/>
+  <circle cx="230" cy="60" r="3" fill="#4fc3f7"/>
+  <circle cx="230" cy="120" r="3" fill="#4fc3f7"/>
+  <text x="240" y="93" font-size="10" fill="#4fc3f7">RELAY_DRV_1</text>
+  <!-- ULN2803A -->
+  <rect x="320" y="75" width="80" height="40" rx="4" fill="#1a2a3a" stroke="#ce93d8" stroke-width="1.5"/>
+  <text x="360" y="93" text-anchor="middle" font-size="10" fill="#ce93d8">U5 ULN2803A</text>
+  <text x="360" y="107" text-anchor="middle" font-size="9" fill="#90caf9">OUT1 (pin 18)</text>
+  <line x1="320" y1="95" x2="280" y2="95" stroke="#4fc3f7" stroke-width="1.5" marker-end="url(#arr3)"/>
+  <line x1="280" y1="60" x2="280" y2="120" stroke="#4fc3f7" stroke-width="1.5"/>
+  <circle cx="280" cy="95" r="3" fill="#4fc3f7"/>
+  <!-- ULN IN1 -->
+  <line x1="400" y1="95" x2="440" y2="95" stroke="#ce93d8" stroke-width="1.5"/>
+  <text x="450" y="99" font-size="10" fill="#ce93d8">IN1 (pin 1)</text>
+  <text x="450" y="113" font-size="10" fill="#90caf9">← GPIO32</text>
+  <!-- GND symbol -->
+  <line x1="280" y1="155" x2="280" y2="165" stroke="#607080" stroke-width="1.5"/>
+  <line x1="268" y1="165" x2="292" y2="165" stroke="#607080" stroke-width="2"/>
+  <line x1="272" y1="169" x2="288" y2="169" stroke="#607080" stroke-width="1.5"/>
+  <line x1="276" y1="173" x2="284" y2="173" stroke="#607080" stroke-width="1"/>
+  <text x="280" y="185" text-anchor="middle" font-size="10" fill="#607080">GND</text>
+  <line x1="280" y1="120" x2="280" y2="155" stroke="#607080" stroke-width="1.5"/>
+  <defs>
+    <marker id="arr3" markerWidth="6" markerHeight="5" refX="0" refY="2.5" orient="auto">
+      <polygon points="6 0, 0 2.5, 6 5" fill="#4fc3f7"/>
+    </marker>
+  </defs>
+  <!-- Contact section -->
+  <text x="30" y="175" font-size="10" fill="#90caf9">Relay contacts: COM → AC_COM bus  |  NO → ZONE1_OUT screw terminal  |  MOV across COM and NO</text>
+</svg>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<h2 id="easyeda-tips">7. EasyEDA Standard Entry Tips</h2>
+
+<h3>Recommended Entry Order</h3>
+<p>Work through the schematic in this order to make routing logical:</p>
+<ol style="margin-left:20px;color:#b0bec5;line-height:2">
+  <li>Power symbols first — place GND, +5V, +3V3, VBUS_RAW power flags on the sheet</li>
+  <li>Power supply block — D1, U4, L1, D2, C1, C2, F1, U3, C3, C4</li>
+  <li>ESP32 module (U1) — place centrally, add decoupling C5, C6</li>
+  <li>CH340C (U2) + auto-reset — Q1, Q2, R6, R7, C9, C10</li>
+  <li>USB-C connector (J1) + ESD (D3) + F2 + R1, R2</li>
+  <li>ULN2803A (U5) + 8 zone GPIO connections using net labels</li>
+  <li>Relays K1–K8 + zone LEDs LED1–LED8 + R8–R15</li>
+  <li>Zone output terminals J4–J11, J12 COM, MOVs RV1–RV8</li>
+  <li>Power input connectors J2, J3, JP1, F1</li>
+  <li>Buttons SW1, SW2, pull-up/pull-down resistors R3, R4, R5</li>
+  <li>Status LED9 + R16</li>
+</ol>
+
+<h3>Library Search in EasyEDA Standard</h3>
+<div class="tip">
+  <strong>Fastest method:</strong> Press <code>P</code> → in the search box type the LCSC part number exactly (e.g., <code>C84681</code>) → click the result → the component appears with footprint pre-assigned. Do this for every IC and connector.
+</div>
+
+<div class="info">
+  <strong>For basic passives</strong> (resistors, capacitors): search <code>0402 resistor 10k</code> or similar. EasyEDA's basic library has these — they count as "Basic" parts for JLCPCB with no setup fee.
+</div>
+
+<h3>Net Labels vs. Wires</h3>
+<p>Use <strong>net labels</strong> (press <code>N</code>) for any connection longer than ~3 component widths. Give each label the exact net name from this document (e.g., <code>RELAY_DRV_1</code>). EasyEDA treats any two labels with the same name as electrically connected — no wire needed across the sheet.</p>
+
+<h3>Power Flags</h3>
+<p>EasyEDA expects at least one "Power Flag" on each power rail to suppress ERC warnings. Place a PWR_FLAG symbol on +5V, +3V3, GND, and VBUS_RAW nets.</p>
+
+<h3>ERC Check</h3>
+<p>When the schematic is complete: <strong>Design → ERC Check</strong>. Common errors to expect and resolve:</p>
+<ul style="margin-left:20px;color:#b0bec5;line-height:2">
+  <li>"Pin unconnected" — verify every IC pin is either connected to a net or has a "No Connect" (X) marker</li>
+  <li>"Net has no driver" — add a PWR_FLAG on rails that only have passive components</li>
+  <li>"Duplicate net labels" — intentional (they're connected); dismiss these</li>
+</ul>
+
+<h3>Before Generating Gerbers</h3>
+<div class="warn">
+  <strong>Double-check before PCB layout:</strong>
+  ✓ U5 COM pin (pin 10) connected to +5V &nbsp;|&nbsp;
+  ✓ R5 from GPIO12 to GND present &nbsp;|&nbsp;
+  ✓ R1, R2 (5.1kΩ) on USB-C CC1 and CC2 &nbsp;|&nbsp;
+  ✓ K1–K8 using LCSC C165255 (not C128511 or C22363895) &nbsp;|&nbsp;
+  ✓ D1 MB10F AC pins to AC_LINE and AC_COM (not polarity-sensitive, but verify symbol orientation)
+</div>
+
+<hr style="border:1px solid #1a3a5c;margin:40px 0 20px">
+<p style="color:#607080;font-size:0.85rem;text-align:center">SprinKlr-8 Schematic Reference v1.0 &nbsp;|&nbsp; May 2026 &nbsp;|&nbsp; For use with EasyEDA Standard</p>
+
+</main>
+</body>
+</html>

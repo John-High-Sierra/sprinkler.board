@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SprinKlr-8 Setup</title>
+  <script
+    type="module"
+    src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"
+  ></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #f0f4f0;
+      color: #1a2e1a;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    /* ── Header ── */
+    header {
+      width: 100%;
+      background: linear-gradient(135deg, #1b5e20 0%, #2e7d32 60%, #388e3c 100%);
+      color: white;
+      text-align: center;
+      padding: 2.5rem 1rem 2rem;
+    }
+    header .logo {
+      font-size: 2.8rem;
+      font-weight: 800;
+      letter-spacing: -1px;
+    }
+    header .logo span { color: #a5d6a7; }
+    header .tagline {
+      margin-top: 0.4rem;
+      font-size: 1.05rem;
+      opacity: 0.85;
+      font-weight: 400;
+    }
+
+    /* ── Main container ── */
+    .container {
+      width: 100%;
+      max-width: 720px;
+      padding: 2rem 1.5rem 4rem;
+    }
+
+    /* ── Browser warning ── */
+    .browser-warn {
+      background: #fff8e1;
+      border-left: 4px solid #f9a825;
+      border-radius: 6px;
+      padding: 0.85rem 1rem;
+      margin-bottom: 2rem;
+      font-size: 0.92rem;
+      display: flex;
+      align-items: flex-start;
+      gap: 0.6rem;
+    }
+    .browser-warn .icon { font-size: 1.3rem; flex-shrink: 0; }
+    #browser-ok { display: none; }
+
+    /* ── Step cards ── */
+    .steps { display: flex; flex-direction: column; gap: 1.4rem; }
+
+    .step {
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+      padding: 1.5rem 1.5rem 1.5rem 1.2rem;
+      display: grid;
+      grid-template-columns: 2.6rem 1fr;
+      gap: 0 1rem;
+      align-items: start;
+    }
+    .step.active { border: 2px solid #2e7d32; }
+    .step.done   { opacity: 0.6; }
+
+    .step-num {
+      width: 2.2rem;
+      height: 2.2rem;
+      border-radius: 50%;
+      background: #2e7d32;
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 1rem;
+      flex-shrink: 0;
+    }
+    .step.done .step-num { background: #81c784; }
+
+    .step-body h2 {
+      font-size: 1.1rem;
+      font-weight: 700;
+      margin-bottom: 0.35rem;
+      color: #1b5e20;
+    }
+    .step-body p  { font-size: 0.93rem; line-height: 1.55; color: #333; }
+    .step-body p + p { margin-top: 0.5rem; }
+
+    code {
+      background: #e8f5e9;
+      border: 1px solid #c8e6c9;
+      border-radius: 4px;
+      padding: 0.1em 0.4em;
+      font-size: 0.88em;
+      font-family: "SF Mono", "Fira Code", Consolas, monospace;
+      color: #1b5e20;
+    }
+
+    /* ── Install button area ── */
+    .install-wrap {
+      margin-top: 1rem;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 0.6rem;
+    }
+
+    esp-web-install-button {
+      --esp-tools-button-color: #2e7d32;
+      --esp-tools-button-text-color: white;
+      --esp-tools-button-border-radius: 8px;
+    }
+    esp-web-install-button[install-supported] button,
+    esp-web-install-button::part(button) {
+      background: #2e7d32;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      padding: 0.65rem 1.4rem;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    esp-web-install-button[install-supported] button:hover,
+    esp-web-install-button::part(button):hover {
+      background: #1b5e20;
+    }
+
+    .note {
+      font-size: 0.82rem;
+      color: #666;
+      font-style: italic;
+    }
+
+    /* ── Improv info box ── */
+    .improv-box {
+      margin-top: 1rem;
+      background: #e8f5e9;
+      border-radius: 8px;
+      padding: 0.85rem 1rem;
+      font-size: 0.88rem;
+      line-height: 1.5;
+      border-left: 3px solid #2e7d32;
+    }
+    .improv-box strong { color: #1b5e20; }
+
+    /* ── Troubleshooting ── */
+    details {
+      background: white;
+      border-radius: 10px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+      margin-top: 2.5rem;
+      overflow: hidden;
+    }
+    details summary {
+      padding: 1rem 1.2rem;
+      font-weight: 600;
+      cursor: pointer;
+      color: #1b5e20;
+      font-size: 1rem;
+      list-style: none;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    details summary::before { content: "🔧"; }
+    details[open] summary { border-bottom: 1px solid #e0e0e0; }
+
+    .trouble-list {
+      padding: 0.8rem 1.2rem 1.2rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+    .trouble-item h3 {
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: #1b5e20;
+      margin-bottom: 0.2rem;
+    }
+    .trouble-item p { font-size: 0.88rem; line-height: 1.55; color: #444; }
+
+    /* ── Footer ── */
+    footer {
+      width: 100%;
+      text-align: center;
+      padding: 1.2rem;
+      font-size: 0.8rem;
+      color: #888;
+      border-top: 1px solid #ddd;
+      background: white;
+    }
+    footer a { color: #2e7d32; text-decoration: none; }
+    footer a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">Sprin<span>Klr</span>-8</div>
+  <div class="tagline">Wi-Fi Sprinkler Controller &nbsp;·&nbsp; First-Time Setup</div>
+</header>
+
+<div class="container">
+
+  <!-- Browser warning (shown only for non-Chrome/Edge browsers) -->
+  <div class="browser-warn" id="browser-warn">
+    <span class="icon">⚠️</span>
+    <div>
+      <strong>Chrome or Edge required.</strong>
+      This page uses the Web Serial API which only works in Google Chrome and
+      Microsoft Edge (desktop). Please open this page in one of those browsers.
+    </div>
+  </div>
+  <div id="browser-ok"></div><!-- cleared by JS if Chrome/Edge -->
+
+  <div class="steps">
+
+    <!-- Step 1 -->
+    <div class="step" id="step1">
+      <div class="step-num">1</div>
+      <div class="step-body">
+        <h2>Connect the board to your computer</h2>
+        <p>
+          Plug the SprinKlr-8 into a USB port using a <strong>data-capable</strong>
+          USB-C cable (charge-only cables won't work). The board has a
+          <strong>CH340C</strong> USB-to-serial chip — Windows usually installs the
+          driver automatically. If not,
+          <a href="https://www.wch.cn/downloads/CH341SER_EXE.html" target="_blank" rel="noopener">
+            download the CH340 driver here</a>.
+        </p>
+        <p>
+          Once plugged in, the green power LED on the board should light up.
+        </p>
+      </div>
+    </div>
+
+    <!-- Step 2 -->
+    <div class="step" id="step2">
+      <div class="step-num">2</div>
+      <div class="step-body">
+        <h2>Install the firmware</h2>
+        <p>Click the button below to flash the SprinKlr-8 firmware directly from
+        your browser. Chrome will ask you to select a serial port — choose the one
+        labelled <strong>CH340</strong> or <strong>USB Serial</strong>.</p>
+
+        <div class="install-wrap">
+          <esp-web-install-button manifest="manifest.json">
+            <button slot="activate">⚡ Install SprinKlr-8 Firmware</button>
+            <span slot="unsupported">
+              <em style="color:#c62828;">
+                Web Serial is not supported in this browser.
+                Please use Chrome or Edge on a desktop computer.
+              </em>
+            </span>
+          </esp-web-install-button>
+          <span class="note">
+            This will erase any existing firmware and write the latest v1.2.0 release.
+          </span>
+        </div>
+
+        <div class="improv-box">
+          <strong>What happens next:</strong> After flashing completes, this page will
+          automatically show a <em>"Configure Wi-Fi"</em> dialog — you don't need to do
+          anything else. Just enter your home Wi-Fi network name and password when
+          prompted.
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 3 -->
+    <div class="step" id="step3">
+      <div class="step-num">3</div>
+      <div class="step-body">
+        <h2>Enter your Wi-Fi credentials</h2>
+        <p>
+          A dialog box will appear asking for your Wi-Fi network (SSID) and password.
+          Enter them and click <strong>Connect</strong>. The board will connect and
+          report its address.
+        </p>
+        <p>
+          If the dialog doesn't appear automatically, the board is still reachable
+          via its setup hotspot — see Troubleshooting below.
+        </p>
+      </div>
+    </div>
+
+    <!-- Step 4 -->
+    <div class="step" id="step4">
+      <div class="step-num">4</div>
+      <div class="step-body">
+        <h2>Open the sprinkler dashboard</h2>
+        <p>
+          Once connected, click the link shown in the dialog, or open your browser
+          and go to:
+        </p>
+        <p style="margin-top:0.6rem;">
+          <a href="http://sprinkler.local" target="_blank" rel="noopener">
+            <code>http://sprinkler.local</code>
+          </a>
+        </p>
+        <p style="margin-top:0.5rem;">
+          If <code>sprinkler.local</code> doesn't work on your network, use the
+          IP address shown in the Wi-Fi dialog instead.
+        </p>
+        <p style="margin-top:0.5rem;">
+          You can now unplug the USB cable — the board runs on its 24 VAC sprinkler
+          power supply from this point on.
+        </p>
+      </div>
+    </div>
+
+    <!-- Step 5 -->
+    <div class="step" id="step5">
+      <div class="step-num">5</div>
+      <div class="step-body">
+        <h2>Set your timezone</h2>
+        <p>
+          In the dashboard, tap the <strong>⚙ Settings</strong> tab and select
+          your timezone from the dropdown. Tap <strong>Save</strong>. The clock in
+          the header will update immediately, and schedules will run at the correct
+          local times.
+        </p>
+      </div>
+    </div>
+
+  </div><!-- /.steps -->
+
+  <!-- Troubleshooting -->
+  <details>
+    <summary>Troubleshooting</summary>
+    <div class="trouble-list">
+
+      <div class="trouble-item">
+        <h3>The Install button says "Unsupported"</h3>
+        <p>Web Serial only works in Google Chrome and Microsoft Edge on a
+        <em>desktop or laptop computer</em>. It does not work on phones, tablets,
+        Firefox, or Safari. Open this page in Chrome or Edge.</p>
+      </div>
+
+      <div class="trouble-item">
+        <h3>No serial port appears in the list</h3>
+        <p>Check that you're using a data cable (not a charge-only cable). Install
+        the <a href="https://www.wch.cn/downloads/CH341SER_EXE.html" target="_blank"
+        rel="noopener">CH340 driver</a> on Windows if the port doesn't appear.
+        On Mac, the port shows as <code>/dev/cu.usbserial-*</code> — no driver needed
+        on macOS 12+.</p>
+      </div>
+
+      <div class="trouble-item">
+        <h3>The Wi-Fi dialog didn't appear after flashing</h3>
+        <p>The board waits 30 seconds for the browser dialog. If that window passed,
+        you can still configure Wi-Fi the classic way: on your phone or laptop,
+        connect to the <strong>SprinklerSetup</strong> Wi-Fi network
+        (password: <code>sprinkler123</code>). A setup page will open automatically.
+        Enter your home Wi-Fi credentials there.</p>
+      </div>
+
+      <div class="trouble-item">
+        <h3><code>sprinkler.local</code> doesn't open</h3>
+        <p>mDNS (the technology behind <code>.local</code> addresses) can be blocked
+        on some corporate or guest networks. Find the board's IP address by logging
+        into your router's admin page and looking for a device named
+        <code>sprinkler</code>, then open that IP directly in your browser.</p>
+      </div>
+
+      <div class="trouble-item">
+        <h3>I need to change the Wi-Fi network</h3>
+        <p>Power on the board and immediately hold the <strong>IO0 / BOOT</strong>
+        button for 3 seconds. The board will erase its saved Wi-Fi credentials and
+        open the <strong>SprinklerSetup</strong> hotspot again so you can enter new
+        ones.</p>
+      </div>
+
+      <div class="trouble-item">
+        <h3>Firmware update failed partway through</h3>
+        <p>If the flash was interrupted, the board may not boot. Simply click
+        <em>Install SprinKlr-8 Firmware</em> again — it will retry the full flash
+        from scratch and recover the board.</p>
+      </div>
+
+    </div>
+  </details>
+
+</div><!-- /.container -->
+
+<footer>
+  SprinKlr-8 &nbsp;·&nbsp;
+  Firmware source on
+  <a href="https://github.com/John-High-Sierra/sprinkler.board" target="_blank" rel="noopener">GitHub</a>
+</footer>
+
+<script>
+  // Detect browser support for Web Serial
+  const isSupported = ('serial' in navigator);
+  const warn = document.getElementById('browser-warn');
+  if (isSupported && warn) warn.style.display = 'none';
+</script>
+
+</body>
+</html>
