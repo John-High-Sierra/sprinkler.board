@@ -1248,13 +1248,20 @@ namespace Improv {
 
 void runImprovSerial() {
   Serial.println("[IMPROV] Waiting for browser provisioning (30 s)...");
-  Improv::sendState(Improv::STATE_AUTHORIZED);
 
   Improv::Parser parser;
   String ssid, pass;
-  unsigned long deadline = millis() + IMPROV_TIMEOUT_MS;
+  unsigned long deadline      = millis() + IMPROV_TIMEOUT_MS;
+  unsigned long lastHeartbeat = 0;
 
   while (millis() < deadline) {
+    // Re-send AUTHORIZED every 1 s so the browser catches it even if it
+    // missed the first packet while re-establishing the serial connection.
+    if (millis() - lastHeartbeat >= 1000) {
+      Improv::sendState(Improv::STATE_AUTHORIZED);
+      lastHeartbeat = millis();
+    }
+
     while (Serial.available()) {
       uint8_t b = (uint8_t)Serial.read();
       if (parser.feed(b, ssid, pass)) {
