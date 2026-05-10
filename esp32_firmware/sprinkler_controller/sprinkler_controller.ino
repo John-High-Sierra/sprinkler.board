@@ -1118,28 +1118,29 @@ namespace Improv {
   static const uint8_t STATE_PROVISIONING = 0x03;
   static const uint8_t STATE_PROVISIONED  = 0x04;
 
-  // RPC commands
-  static const uint8_t RPC_WIFI_SETTINGS  = 0x01;
+  // RPC command codes (browser -> device)
+  static const uint8_t RPC_WIFI_SETTINGS     = 0x01;
+  static const uint8_t RPC_GET_CURRENT_STATE = 0x02;
+  static const uint8_t RPC_GET_DEVICE_INFO   = 0x03;
+  static const uint8_t RPC_GET_WIFI_NETWORKS = 0x04;
 
   // Error codes
   static const uint8_t ERR_NONE           = 0x00;
-  static const uint8_t ERR_INVALID_RPC    = 0x01;
-  static const uint8_t ERR_UNKNOWN_RPC    = 0x02;
   static const uint8_t ERR_UNABLE_TO_CONN = 0x03;
 
-  // ── Send a packet over Serial ──────────────────────────────
+  // ── Send a packet — assembled in one buffer, sent atomically ─
   void sendPacket(uint8_t type, const uint8_t* data, uint8_t dataLen) {
-    // Header
-    Serial.write((const uint8_t*)"IMPROV", 6);
-    Serial.write((uint8_t)0x01);    // version
-    Serial.write(type);
-    Serial.write(dataLen);
-    // Data
-    if (dataLen > 0) Serial.write(data, dataLen);
-    // Checksum: sum of all bytes from version onward
+    uint8_t pkt[270];   // 9 header + up to 255 data + 1 checksum
+    memcpy(pkt, "IMPROV", 6);
+    pkt[6] = 0x01;
+    pkt[7] = type;
+    pkt[8] = dataLen;
+    if (dataLen > 0) memcpy(pkt + 9, data, dataLen);
     uint8_t sum = 0x01 + type + dataLen;
     for (uint8_t i = 0; i < dataLen; i++) sum += data[i];
-    Serial.write(sum);
+    pkt[9 + dataLen] = sum;
+    Serial.write(pkt, 10 + dataLen);
+    Serial.flush();
   }
 
   void sendState(uint8_t state) {
@@ -1150,89 +1151,93 @@ namespace Improv {
     sendPacket(TYPE_ERROR_STATE, &err, 1);
   }
 
-  // Build an RPC result: length-prefixed strings concatenated
-  // url is the redirect URL returned on success; pass "" to skip
-  void sendRpcResult(const String& url) {
-    uint8_t buf[128];
+  // Helper: append a length-prefixed string into a buffer
+  static uint8_t appendStr(uint8_t* buf, uint8_t pos, const char* s) {
+    uint8_t l = (uint8_t)strlen(s);
+    buf[pos++] = l;
+    memcpy(buf + pos, s, l);
+    return pos + l;
+  }
+
+  // RPC result for WIFI_SETTINGS (returns redirect URL)
+  void sendWifiResult(const char* url) {
+    uint8_t buf[132];
     uint8_t pos = 0;
-    if (url.length() > 0 && url.length() < 120) {
-      uint8_t slen = (uint8_t)url.length();
-      buf[pos++] = slen;
-      memcpy(buf + pos, url.c_str(), slen);
-      pos += slen;
-    }
+    buf[pos++] = RPC_WIFI_SETTINGS;
+    pos = appendStr(buf, pos, url);
     sendPacket(TYPE_RPC_RESULT, buf, pos);
   }
 
-  // ── Parse incoming bytes looking for a valid packet ────────
-  // Returns true and populates ssid/pass when a WIFI_SETTINGS RPC arrives.
-  // Call repeatedly with each new byte.
+  // RPC result for GET_DEVICE_INFO
+  void sendDeviceInfo(const char* fwName, const char* fwVer,
+                      const char* hwChip, const char* devName) {
+    uint8_t buf[200];
+    uint8_t pos = 0;
+    buf[pos++] = RPC_GET_DEVICE_INFO;
+    pos = appendStr(buf, pos, fwName);
+    pos = appendStr(buf, pos, fwVer);
+    pos = appendStr(buf, pos, hwChip);
+    pos = appendStr(buf, pos, devName);
+    sendPacket(TYPE_RPC_RESULT, buf, pos);
+  }
+
+  // Parse result
+  struct ParseResult {
+    bool    valid = false;
+    uint8_t cmd   = 0;
+    String  ssid;
+    String  pass;
+  };
+
+  // Streaming packet parser
   struct Parser {
     uint8_t buf[256];
     int     pos = 0;
 
-    bool feed(uint8_t b, String& ssid, String& pass) {
+    ParseResult feed(uint8_t b) {
+      ParseResult r;
       buf[pos++] = b;
-      if (pos > (int)sizeof(buf)) pos = 0;  // overflow guard
+      if (pos > (int)sizeof(buf)) pos = 0;
+      if (pos < 10) return r;
 
-      // Need at least header(6) + version(1) + type(1) + len(1) + checksum(1) = 10
-      if (pos < 10) return false;
-
-      // Scan for "IMPROV" header in buffer
       int start = -1;
       for (int i = 0; i <= pos - 6; i++) {
         if (memcmp(buf + i, "IMPROV", 6) == 0) { start = i; break; }
       }
       if (start < 0) {
-        // No header yet — keep last 9 bytes in case header is split
-        if (pos > 9) {
-          memmove(buf, buf + pos - 9, 9);
-          pos = 9;
-        }
-        return false;
+        if (pos > 9) { memmove(buf, buf + pos - 9, 9); pos = 9; }
+        return r;
       }
-      // Slide buffer to start of header
-      if (start > 0) {
-        memmove(buf, buf + start, pos - start);
-        pos -= start;
-      }
+      if (start > 0) { memmove(buf, buf + start, pos - start); pos -= start; }
+      if (pos < 9) return r;
 
-      // Minimum: IMPROV(6) + ver(1) + type(1) + len(1) = 9 bytes before data
-      if (pos < 9) return false;
       uint8_t type    = buf[7];
       uint8_t dataLen = buf[8];
-      int     total   = 9 + dataLen + 1; // +1 for checksum
-      if (pos < total) return false;
+      int     total   = 9 + dataLen + 1;
+      if (pos < total) return r;
 
-      // Verify checksum
       uint8_t sum = 0;
       for (int i = 6; i < 9 + dataLen; i++) sum += buf[i];
       if (buf[9 + dataLen] != sum) {
-        // Bad checksum — discard this header byte and retry
-        memmove(buf, buf + 1, pos - 1);
-        pos--;
-        return false;
+        memmove(buf, buf + 1, pos - 1); pos--;
+        return r;
       }
 
-      // Consume the packet
-      bool result = false;
       if (type == TYPE_RPC_COMMAND && dataLen >= 1) {
-        uint8_t cmd = buf[9];
-        if (cmd == RPC_WIFI_SETTINGS && dataLen >= 3) {
-          // Payload: [ssidLen][ssid bytes][passLen][pass bytes]
+        r.valid = true;
+        r.cmd   = buf[9];
+        if (r.cmd == RPC_WIFI_SETTINGS && dataLen >= 3) {
           uint8_t sl = buf[10];
-          if (9 + 1 + 1 + sl + 1 <= dataLen) {   // sanity
-            ssid = String((char*)(buf + 11), sl);
+          if ((int)(9 + 2 + sl + 1) <= (int)(9 + dataLen)) {
+            r.ssid = String((char*)(buf + 11), sl);
             uint8_t pl = buf[11 + sl];
-            pass = String((char*)(buf + 12 + sl), pl);
-            result = true;
+            r.pass = String((char*)(buf + 12 + sl), pl);
           }
         }
       }
-      // Consume packet bytes
       memmove(buf, buf + total, pos - total);
       pos -= total;
-      return result;
+      return r;
     }
   };
 }  // namespace Improv
@@ -1247,58 +1252,67 @@ namespace Improv {
 #define IMPROV_TIMEOUT_MS 30000UL
 
 void runImprovSerial() {
-  Serial.println("[IMPROV] Waiting for browser provisioning (30 s)...");
+  Serial.println("[improv] Waiting for browser provisioning (30 s)...");
 
   Improv::Parser parser;
-  String ssid, pass;
   unsigned long deadline      = millis() + IMPROV_TIMEOUT_MS;
   unsigned long lastHeartbeat = 0;
+  int           secondsLeft   = (int)(IMPROV_TIMEOUT_MS / 1000);
 
   while (millis() < deadline) {
-    // Re-send AUTHORIZED every 1 s so the browser catches it even if it
-    // missed the first packet while re-establishing the serial connection.
+    // Broadcast AUTHORIZED every 1 s so browser catches it after reconnecting
     if (millis() - lastHeartbeat >= 1000) {
       Improv::sendState(Improv::STATE_AUTHORIZED);
+      Serial.printf("[improv] Waiting... %d s remaining\n", secondsLeft--);
       lastHeartbeat = millis();
     }
 
     while (Serial.available()) {
-      uint8_t b = (uint8_t)Serial.read();
-      if (parser.feed(b, ssid, pass)) {
-        // Got valid WIFI_SETTINGS command
-        Serial.printf("[IMPROV] Received credentials — SSID: %s\n", ssid.c_str());
+      Improv::ParseResult r = parser.feed((uint8_t)Serial.read());
+      if (!r.valid) continue;
+
+      if (r.cmd == Improv::RPC_GET_CURRENT_STATE) {
+        // Browser asking for state — reply immediately
+        Improv::sendState(Improv::STATE_AUTHORIZED);
+
+      } else if (r.cmd == Improv::RPC_GET_DEVICE_INFO) {
+        // Browser wants device info before showing the WiFi dialog
+        Improv::sendDeviceInfo("SprinKlr-8", FW_VERSION, "ESP32", "SprinKlr-8");
+
+      } else if (r.cmd == Improv::RPC_GET_WIFI_NETWORKS) {
+        // Not implemented — send empty result so browser does not stall
+        uint8_t empty[1] = { Improv::RPC_GET_WIFI_NETWORKS };
+        Improv::sendPacket(Improv::TYPE_RPC_RESULT, empty, 1);
+
+      } else if (r.cmd == Improv::RPC_WIFI_SETTINGS) {
+        Serial.printf("[improv] Credentials received — SSID: %s\n", r.ssid.c_str());
         Improv::sendState(Improv::STATE_PROVISIONING);
 
-        WiFi.begin(ssid.c_str(), pass.c_str());
+        WiFi.begin(r.ssid.c_str(), r.pass.c_str());
         unsigned long wifiDeadline = millis() + 15000UL;
         while (WiFi.status() != WL_CONNECTED && millis() < wifiDeadline) {
           delay(200);
         }
 
         if (WiFi.status() == WL_CONNECTED) {
-          Serial.printf("[IMPROV] Connected! IP: %s\n", WiFi.localIP().toString().c_str());
+          Serial.printf("[improv] Connected! IP: %s\n", WiFi.localIP().toString().c_str());
           Improv::sendState(Improv::STATE_PROVISIONED);
-          Improv::sendRpcResult("http://sprinkler.local");
-
-          // ESP32 WiFi automatically persists credentials to NVS when
-          // WiFi.begin() connects — WiFiManager will auto-connect on next boot.
-          // Enable persistent storage explicitly just to be sure.
+          Improv::sendWifiResult("http://sprinkler.local");
           WiFi.persistent(true);
-          delay(500);   // let Serial flush before returning
-          return;       // skip WiFiManager portal — already connected
+          delay(500);
+          return;   // already connected — skip WiFiManager
         } else {
-          Serial.println("[IMPROV] WiFi connection failed");
+          Serial.println("[improv] WiFi connection failed");
           Improv::sendError(Improv::ERR_UNABLE_TO_CONN);
-          // Reset and keep waiting for corrected credentials
           Improv::sendState(Improv::STATE_AUTHORIZED);
-          deadline = millis() + IMPROV_TIMEOUT_MS; // reset timer
+          deadline = millis() + IMPROV_TIMEOUT_MS;
         }
       }
     }
     delay(10);
   }
 
-  Serial.println("[IMPROV] Timeout — falling back to WiFiManager");
+  Serial.println("[improv] Timeout — falling back to WiFiManager");
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1306,7 +1320,7 @@ void runImprovSerial() {
 // ═══════════════════════════════════════════════════════════════
 void setup() {
   Serial.begin(115200);
-  delay(500);
+  delay(100);                 // short settle — Improv must start ASAP
   Serial.println("\n[BOOT] ESP32 Sprinkler Controller starting...");
 
   // Mutexes
@@ -1318,11 +1332,7 @@ void setup() {
   setupRelayPins();
   Serial.println("[BOOT] Relay pins configured, all OFF");
 
-  // WiFi reset check — must run early, before LittleFS/schedule delay
-  // Press EN to boot, then immediately hold IO0 for 3 s to wipe WiFi credentials
-  checkWiFiReset();
-
-  // LittleFS
+  // LittleFS — mount BEFORE WiFi init to avoid flash access conflicts
   if (!LittleFS.begin(true)) {
     Serial.println("[BOOT] LittleFS mount failed — formatting...");
     LittleFS.format();
@@ -1335,11 +1345,21 @@ void setup() {
   loadConfig();
 
   // ── Improv WiFi Serial ────────────────────────────────────────
-  // Allows the browser-based setup page (ESP Web Tools) to provision
-  // WiFi credentials over USB immediately after flashing, without
-  // opening the captive portal. Falls back to WiFiManager if the
-  // user isn't on the setup page or doesn't respond within 30 s.
-  runImprovSerial();
+  // Run after LittleFS (to avoid flash conflicts) but before checkWiFiReset.
+  // Skip if credentials are already saved — normal reboots stay fast.
+  {
+    WiFi.mode(WIFI_STA);
+    bool hasCredentials = (WiFi.SSID().length() > 0);
+    if (!hasCredentials) {
+      Serial.println("[BOOT] No saved WiFi — running Improv provisioning");
+      runImprovSerial();
+    } else {
+      Serial.println("[BOOT] Saved WiFi found — skipping Improv");
+    }
+  }
+
+  // WiFi reset check — hold IO0 for 3 s after boot to wipe WiFi credentials
+  checkWiFiReset();
 
   // WiFi (fallback / normal connect after Improv or on subsequent boots)
   setupWiFi();

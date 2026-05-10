@@ -163,6 +163,65 @@
     }
     .improv-box strong { color: #1b5e20; }
 
+    /* ── Serial monitor ── */
+    .monitor-wrap {
+      margin-top: 1.2rem;
+      display: none;
+    }
+    .monitor-wrap.visible { display: block; }
+    .monitor-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      margin-bottom: 0.4rem;
+    }
+    .monitor-toolbar span {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #1b5e20;
+    }
+    .btn-monitor {
+      background: #2e7d32;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      padding: 0.4rem 0.9rem;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .btn-monitor:hover { background: #1b5e20; }
+    .btn-monitor.disconnect { background: #c62828; }
+    .btn-monitor.disconnect:hover { background: #8b0000; }
+    .btn-clear {
+      background: none;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      padding: 0.4rem 0.7rem;
+      font-size: 0.82rem;
+      cursor: pointer;
+      color: #555;
+    }
+    #monitor-output {
+      background: #0d1117;
+      color: #b0ffb0;
+      font-family: "SF Mono", "Fira Code", Consolas, monospace;
+      font-size: 0.78rem;
+      line-height: 1.5;
+      border-radius: 8px;
+      padding: 0.8rem 1rem;
+      height: 220px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+    .monitor-status {
+      font-size: 0.78rem;
+      color: #888;
+      margin-top: 0.3rem;
+    }
+
     /* ── Troubleshooting ── */
     details {
       background: white;
@@ -279,11 +338,22 @@
         </div>
 
         <div class="improv-box">
-          <strong>What happens next:</strong> After flashing completes, a
-          <em>"Configure Wi-Fi"</em> dialog should appear automatically.
-          If it doesn't appear within 5 seconds, click&nbsp;<strong>Logs&nbsp;&amp;&nbsp;Console</strong>,
-          wait for boot messages to appear, then click&nbsp;<strong>Back</strong> —
-          the dialog will then show. Enter your home Wi-Fi name and password when prompted.
+          <strong>What happens next:</strong> After flashing, click
+          <strong>▶ View Boot Log</strong> below to watch the board start up.
+          A <em>"Configure Wi-Fi"</em> dialog may also appear automatically —
+          if it does, enter your home Wi-Fi name and password there.
+        </div>
+
+        <!-- Serial monitor -->
+        <div class="monitor-wrap visible" id="monitor-wrap">
+          <div class="monitor-toolbar">
+            <span>📟 Boot Log</span>
+            <button class="btn-monitor" id="btn-connect" onclick="monitorConnect()">▶ View Boot Log</button>
+            <button class="btn-clear" onclick="monitorClear()">Clear</button>
+            <button class="btn-monitor disconnect" id="btn-disconnect" style="display:none" onclick="monitorDisconnect()">✕ Disconnect</button>
+          </div>
+          <div id="monitor-output">Click "View Boot Log" after flashing to see what the board is doing...</div>
+          <div class="monitor-status" id="monitor-status"></div>
         </div>
       </div>
     </div>
@@ -417,6 +487,67 @@
   const isSupported = ('serial' in navigator);
   const warn = document.getElementById('browser-warn');
   if (isSupported && warn) warn.style.display = 'none';
+
+  // ── Serial Monitor ───────────────────────────────────────────
+  let monitorPort   = null;
+  let monitorReader = null;
+  let monitorActive = false;
+
+  async function monitorConnect() {
+    if (!('serial' in navigator)) {
+      setStatus('Web Serial not supported — use Chrome or Edge.');
+      return;
+    }
+    try {
+      monitorPort = await navigator.serial.requestPort();
+      await monitorPort.open({ baudRate: 115200 });
+      monitorActive = true;
+      document.getElementById('btn-connect').style.display    = 'none';
+      document.getElementById('btn-disconnect').style.display = 'inline-block';
+      setStatus('Connected — watching boot log...');
+      monitorClear();
+      readLoop();
+    } catch (e) {
+      setStatus('Not connected: ' + e.message);
+    }
+  }
+
+  async function readLoop() {
+    const decoder = new TextDecoder();
+    const out     = document.getElementById('monitor-output');
+    try {
+      monitorReader = monitorPort.readable.getReader();
+      while (monitorActive) {
+        const { value, done } = await monitorReader.read();
+        if (done) break;
+        out.textContent += decoder.decode(value);
+        out.scrollTop = out.scrollHeight;
+      }
+    } catch (e) {
+      if (monitorActive) setStatus('Disconnected: ' + e.message);
+    } finally {
+      monitorReader = null;
+    }
+  }
+
+  async function monitorDisconnect() {
+    monitorActive = false;
+    try { if (monitorReader) await monitorReader.cancel(); } catch (_) {}
+    try { if (monitorPort)   await monitorPort.close();   } catch (_) {}
+    monitorPort   = null;
+    monitorReader = null;
+    document.getElementById('btn-connect').style.display    = 'inline-block';
+    document.getElementById('btn-disconnect').style.display = 'none';
+    setStatus('Disconnected.');
+  }
+
+  function monitorClear() {
+    document.getElementById('monitor-output').textContent = '';
+  }
+
+  function setStatus(msg) {
+    document.getElementById('monitor-status').textContent = msg;
+  }
 </script>
 
 </body>
