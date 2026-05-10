@@ -1057,24 +1057,24 @@ void setupWiFi() {
     // ── First-time setup instructions ──────────────────────────
     Serial.println("");
     Serial.println("================================================");
-    Serial.println("  SprinKlr-8  —  First Time Setup");
+    Serial.println("  SprinKlr-8 — First Time Setup");
     Serial.println("================================================");
     Serial.println("");
-    Serial.println("  STEP 1: On your phone or tablet, connect to:");
-    Serial.println("          WiFi Network : SprinklerSetup");
-    Serial.println("          Password     : sprinkler123");
+    Serial.println("  The board has opened a temporary WiFi hotspot.");
     Serial.println("");
-    Serial.println("  STEP 2: A setup page opens automatically.");
-    Serial.println("          If not, open: http://192.168.4.1");
+    Serial.println("  STEP 1: On your phone go to Settings > WiFi");
+    Serial.println("          and connect to this network:");
+    Serial.println("          Name     : SprinklerSetup");
+    Serial.println("          Password : sprinkler123");
     Serial.println("");
-    Serial.println("  STEP 3: Enter your home WiFi name & password.");
-    Serial.println("          The board will connect and show its address.");
+    Serial.println("  STEP 2: A login page will open automatically.");
+    Serial.println("          If it does not, open your browser");
+    Serial.println("          and go to: http://192.168.4.1");
     Serial.println("");
-    Serial.println("  STEP 4: Once connected, open your sprinkler");
-    Serial.println("          dashboard at: http://sprinkler.local");
+    Serial.println("  STEP 3: On that page, enter your HOME WiFi");
+    Serial.println("          network name and password, then tap Save.");
     Serial.println("");
-    Serial.println("================================================");
-    Serial.println("  Waiting for WiFi setup...");
+    Serial.println("  Waiting for you to complete setup...");
     Serial.println("================================================");
     Serial.println("");
   }
@@ -1085,17 +1085,28 @@ void setupWiFi() {
   bool connected = wm.autoConnect(AP_NAME, AP_PASSWORD);
 
   if (connected) {
-    Serial.println("");
-    Serial.println("================================================");
-    Serial.println("  CONNECTED!");
-    Serial.printf( "  IP Address   : %s\n", WiFi.localIP().toString().c_str());
-    Serial.println("  Dashboard    : http://sprinkler.local");
-    Serial.printf( "  Also try     : http://%s\n", WiFi.localIP().toString().c_str());
-    Serial.println("================================================");
-    Serial.println("");
     if (MDNS.begin(HOSTNAME)) {
       MDNS.addService("http", "tcp", 80);
     }
+    Serial.println("");
+    Serial.println("================================================");
+    Serial.println("  SUCCESS — Board is on your home network!");
+    Serial.println("================================================");
+    Serial.println("");
+    Serial.println("  STEP 4: On your phone go to Settings > WiFi");
+    Serial.printf( "          and reconnect to your home network.\n");
+    Serial.println("");
+    Serial.println("  STEP 5: Open your browser and go to:");
+    Serial.println("          http://sprinkler.local");
+    Serial.println("");
+    Serial.println("  If sprinkler.local does not load, try:");
+    Serial.printf( "          http://%s\n", WiFi.localIP().toString().c_str());
+    Serial.println("");
+    Serial.println("  STEP 6: The SprinKlr-8 dashboard will open.");
+    Serial.println("          Bookmark it for easy access next time.");
+    Serial.println("");
+    Serial.println("================================================");
+    Serial.println("");
   } else {
     Serial.println("[WIFI] Portal timed out, running in offline mode");
   }
