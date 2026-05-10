@@ -279,10 +279,11 @@
         </div>
 
         <div class="improv-box">
-          <strong>What happens next:</strong> After flashing completes, this page will
-          automatically show a <em>"Configure Wi-Fi"</em> dialog — you don't need to do
-          anything else. Just enter your home Wi-Fi network name and password when
-          prompted.
+          <strong>What happens next:</strong> After flashing completes, a
+          <em>"Configure Wi-Fi"</em> dialog should appear automatically.
+          If it doesn't appear within 5 seconds, click&nbsp;<strong>Logs&nbsp;&amp;&nbsp;Console</strong>,
+          wait for boot messages to appear, then click&nbsp;<strong>Back</strong> —
+          the dialog will then show. Enter your home Wi-Fi name and password when prompted.
         </div>
       </div>
     </div>
@@ -368,11 +369,13 @@
 
       <div class="trouble-item">
         <h3>The Wi-Fi dialog didn't appear after flashing</h3>
-        <p>The board waits 30 seconds for the browser dialog. If that window passed,
-        you can still configure Wi-Fi the classic way: on your phone or laptop,
-        connect to the <strong>SprinklerSetup</strong> Wi-Fi network
-        (password: <code>sprinkler123</code>). A setup page will open automatically.
-        Enter your home Wi-Fi credentials there.</p>
+        <p>This is a known Chrome/ESP32 timing quirk. Click
+        <strong>Logs &amp; Console</strong> in the installer,
+        wait a few seconds for the boot messages to scroll by, then click
+        <strong>Back</strong>. The <em>"Configure Wi-Fi"</em> button will appear.</p>
+        <p>If the 30-second window has already passed, configure Wi-Fi the classic way:
+        connect your phone or laptop to the <strong>SprinklerSetup</strong> Wi-Fi
+        (password: <code>sprinkler123</code>) — a setup page opens automatically.</p>
       </div>
 
       <div class="trouble-item">
