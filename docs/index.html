@@ -338,10 +338,10 @@
         </div>
 
         <div class="improv-box">
-          <strong>What happens next:</strong> After flashing, click
-          <strong>▶ View Boot Log</strong> below to watch the board start up.
-          A <em>"Configure Wi-Fi"</em> dialog may also appear automatically —
-          if it does, enter your home Wi-Fi name and password there.
+          <strong>What happens next:</strong> After flashing the board will
+          restart. Click <strong>▶ View Boot Log</strong> below — the board
+          will print step-by-step setup instructions directly in the log,
+          including the Wi-Fi network name and what to do next.
         </div>
 
         <!-- Serial monitor -->
@@ -352,7 +352,7 @@
             <button class="btn-clear" onclick="monitorClear()">Clear</button>
             <button class="btn-monitor disconnect" id="btn-disconnect" style="display:none" onclick="monitorDisconnect()">✕ Disconnect</button>
           </div>
-          <div id="monitor-output">Click "View Boot Log" after flashing to see what the board is doing...</div>
+          <div id="monitor-output">Click "▶ View Boot Log" after flashing to see setup instructions from the board...</div>
           <div class="monitor-status" id="monitor-status"></div>
         </div>
       </div>
@@ -548,6 +548,39 @@
   function setStatus(msg) {
     document.getElementById('monitor-status').textContent = msg;
   }
+
+  // After ESP Web Tools flashes, try to auto-connect using the already-
+  // authorised port (getPorts() needs no user gesture).
+  async function tryAutoConnect() {
+    if (monitorActive) return;
+    try {
+      const ports = await navigator.serial.getPorts();
+      if (ports.length === 0) return;
+      monitorPort = ports[0];
+      await monitorPort.open({ baudRate: 115200 });
+      monitorActive = true;
+      document.getElementById('btn-connect').style.display    = 'none';
+      document.getElementById('btn-disconnect').style.display = 'inline-block';
+      setStatus('Auto-connected — watching boot log...');
+      monitorClear();
+      readLoop();
+    } catch (e) {
+      // Port still held by ESP Web Tools — user can click manually
+    }
+  }
+
+  // Watch for the ESP Web Tools install dialog to close after a successful flash
+  document.addEventListener('DOMContentLoaded', () => {
+    const btn = document.querySelector('esp-web-install-button');
+    if (!btn) return;
+    btn.addEventListener('state-changed', (e) => {
+      if (e.detail && e.detail.state === 'finished') {
+        // Board rebooting — wait 3 s then auto-connect
+        setStatus('Flashing complete! Waiting for board to restart...');
+        setTimeout(tryAutoConnect, 3000);
+      }
+    });
+  });
 </script>
 
 </body>
