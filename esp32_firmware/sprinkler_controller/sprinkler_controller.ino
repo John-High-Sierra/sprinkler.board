@@ -82,7 +82,7 @@ const int RELAY_PINS[8] = {32, 33, 25, 26, 27, 14, 12, 13};
 #define AP_PASSWORD    "sprinkler123"
 #define NTP_SERVER     "pool.ntp.org"
 #define OTA_PASSWORD   "sprinkler123"  // Password for Arduino IDE OTA and web UI upload
-#define FW_VERSION     "1.2.0"  // Added Improv WiFi Serial provisioning
+#define FW_VERSION     "1.3.0"  // Improv WiFi Serial inline + boot-loop fix
 
 // Cloud update URLs — point these at your GitHub repo
 #define CLOUD_UI_URL  "https://raw.githubusercontent.com/John-High-Sierra/sprinkler.board/main/esp32_firmware/sprinkler_controller/data/index.html"
@@ -1044,71 +1044,236 @@ void checkWiFiReset() {
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  WIFI SETUP (WiFiManager captive portal)
+//  IMPROV WiFi SERIAL  (inline — no external library required)
+//  Protocol: https://www.improv-wifi.com/serial/
+//
+//  After flashing via the setup web page the browser already has
+//  the USB serial port open.  ESP Web Tools detects the Improv
+//  "AUTHORIZED" state packet and shows a "Configure Wi-Fi" dialog
+//  with a network picker — identical to the ESPHome demo.
+//  Credentials are sent back over the same serial link; the board
+//  connects to WiFi and returns the local URL so the browser can
+//  open the dashboard automatically.
+// ═══════════════════════════════════════════════════════════════
+
+static void improv_send(uint8_t type, const uint8_t* data, uint8_t len) {
+  uint8_t sum = 'I' + 'M' + 'P' + 'R' + 'O' + 'V' + 0x01 + type + len;
+  for (uint8_t i = 0; i < len; i++) sum += data[i];
+  const uint8_t hdr[9] = {'I','M','P','R','O','V', 0x01, type, len};
+  Serial.write(hdr, 9);
+  Serial.write(data, len);
+  Serial.write(sum);
+  Serial.flush();
+}
+
+static void improv_state(uint8_t s) { improv_send(0x01, &s, 1); }
+static void improv_error(uint8_t e) { improv_send(0x02, &e, 1); }
+
+// Returns true if WiFi was provisioned via the browser dialog.
+// timeoutMs — how long to wait before falling back to the captive portal.
+bool runImprovSerial(uint32_t timeoutMs) {
+  static uint8_t buf[320];
+  uint16_t  bufLen        = 0;
+  uint32_t  lastStateSend = 0;
+  uint32_t  start         = millis();
+
+  improv_state(0x02);   // AUTHORIZED — ready for credentials
+
+  while (millis() - start < timeoutMs) {
+
+    // Broadcast current state every second so the browser detects us
+    if (millis() - lastStateSend > 1000) {
+      improv_state(0x02);
+      lastStateSend = millis();
+    }
+
+    // Drain incoming bytes into buffer
+    while (Serial.available() > 0 && bufLen < sizeof(buf) - 1) {
+      buf[bufLen++] = (uint8_t)Serial.read();
+    }
+
+    // Scan for the six-byte "IMPROV" header
+    int hp = -1;
+    for (int i = 0; i <= (int)bufLen - 6; i++) {
+      if (memcmp(buf + i, "IMPROV", 6) == 0) { hp = i; break; }
+    }
+
+    if (hp < 0) {
+      // No header — keep only the last 5 bytes (possible partial header)
+      if (bufLen > 5) { memmove(buf, buf + bufLen - 5, 5); bufLen = 5; }
+      delay(5);
+      continue;
+    }
+
+    if (hp > 0) { memmove(buf, buf + hp, bufLen - hp); bufLen -= hp; }
+
+    // Minimum complete packet: 6+1+1+1+1 = 10 bytes
+    if (bufLen < 10) { delay(5); continue; }
+
+    uint8_t  version = buf[6];
+    uint8_t  type    = buf[7];
+    uint8_t  dataLen = buf[8];
+    uint16_t pktLen  = 9u + dataLen + 1u;
+
+    if (bufLen < pktLen) { delay(5); continue; }
+
+    // Verify checksum
+    uint8_t expected = 0;
+    for (uint16_t i = 0; i < 9u + dataLen; i++) expected += buf[i];
+    bool ok = (expected == buf[pktLen - 1]) && (version == 0x01);
+
+    if (ok && type == 0x03) {                 // RPC command from browser
+      uint8_t  cmd     = buf[9];
+      uint8_t* cmdData = buf + 9;
+
+      // ── 0x01  WIFI_SETTINGS ──────────────────────────────────
+      if (cmd == 0x01) {
+        uint8_t ssidLen = cmdData[1];
+        String  ssid(reinterpret_cast<const char*>(cmdData + 2), ssidLen);
+        uint8_t passLen = cmdData[2 + ssidLen];
+        String  pass(reinterpret_cast<const char*>(cmdData + 3 + ssidLen), passLen);
+
+        Serial.printf("\n[IMPROV] Credentials received — SSID: %s\n", ssid.c_str());
+        improv_state(0x03);  // PROVISIONING
+
+        WiFi.begin(ssid.c_str(), pass.c_str());
+        uint32_t t = millis();
+        while (WiFi.status() != WL_CONNECTED && millis() - t < 15000) { delay(200); }
+
+        if (WiFi.status() == WL_CONNECTED) {
+          WiFi.setAutoReconnect(true);
+          if (MDNS.begin(HOSTNAME)) MDNS.addService("http", "tcp", 80);
+
+          improv_state(0x04);  // PROVISIONED
+
+          // RPC result: 1 string = redirect URL
+          String  url = "http://" + WiFi.localIP().toString() + "/";
+          uint8_t result[130]; uint8_t ri = 0;
+          result[ri++] = 0x01;
+          result[ri++] = (uint8_t)url.length();
+          memcpy(result + ri, url.c_str(), url.length()); ri += url.length();
+          improv_send(0x04, result, ri);
+          delay(200);
+
+          Serial.printf("[IMPROV] Connected! IP: %s\n", WiFi.localIP().toString().c_str());
+
+          memmove(buf, buf + pktLen, bufLen - pktLen); bufLen -= pktLen;
+          return true;   // ✓ WiFi provisioned via browser
+
+        } else {
+          Serial.println("[IMPROV] Connection failed — bad password or network unreachable");
+          uint8_t err = 0x03;  // UNABLE_TO_CONNECT
+          improv_error(err);
+          improv_state(0x02);  // Back to AUTHORIZED — user can try again
+        }
+
+      // ── 0x02  GET_DEVICE_INFO ────────────────────────────────
+      } else if (cmd == 0x02) {
+        const char* strs[4] = { "SprinKlr-8", FW_VERSION, "ESP32", "SprinKlr-8" };
+        uint8_t result[120]; uint8_t ri = 0;
+        result[ri++] = 4;
+        for (auto s : strs) {
+          uint8_t l = (uint8_t)strlen(s);
+          result[ri++] = l; memcpy(result + ri, s, l); ri += l;
+        }
+        improv_send(0x04, result, ri);
+
+      // ── 0x03  GET_WIFI_NETWORKS ──────────────────────────────
+      } else if (cmd == 0x03) {
+        int n = WiFi.scanNetworks(false, false, false, 150);
+        if (n < 0) n = 0;
+        if (n > 8)  n = 8;
+
+        uint8_t result[250]; uint8_t ri = 0;
+        result[ri++] = (uint8_t)(n * 3);   // 3 strings per network
+        for (int i = 0; i < n; i++) {
+          String      ssid = WiFi.SSID(i);
+          String      rssi = String(WiFi.RSSI(i));
+          const char* auth = (WiFi.encryptionType(i) != WIFI_AUTH_OPEN) ? "YES" : "NO";
+          const char* trio[3] = { ssid.c_str(), rssi.c_str(), auth };
+          for (auto s : trio) {
+            uint8_t l = (uint8_t)min((int)strlen(s), 32);
+            result[ri++] = l; memcpy(result + ri, s, l); ri += l;
+            if (ri > 230) break;
+          }
+        }
+        improv_send(0x04, result, ri);
+      }
+    }
+
+    // Consume the processed packet from the buffer
+    memmove(buf, buf + pktLen, bufLen - pktLen);
+    bufLen -= pktLen;
+    delay(5);
+  }
+
+  Serial.println("[IMPROV] Timed out — falling back to hotspot setup");
+  return false;
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  WIFI SETUP
+//  Priority:
+//    1. Saved credentials → quick reconnect (silent, no portal)
+//    2. First install via web → Improv dialog in browser (60 s)
+//    3. Fallback → WiFiManager captive portal (for phone-only users)
 // ═══════════════════════════════════════════════════════════════
 void setupWiFi() {
   WiFi.setHostname(HOSTNAME);
-
-  // Check if we already have saved credentials (returning user)
   WiFi.mode(WIFI_STA);
   bool hasCredentials = (WiFi.SSID().length() > 0);
 
-  if (!hasCredentials) {
-    // ── First-time setup instructions ──────────────────────────
-    Serial.println("");
-    Serial.println("================================================");
-    Serial.println("  SprinKlr-8 — First Time Setup");
-    Serial.println("================================================");
-    Serial.println("");
-    Serial.println("  The board has opened a temporary WiFi hotspot.");
-    Serial.println("");
-    Serial.println("  STEP 1: On your phone go to Settings > WiFi");
-    Serial.println("          and connect to this network:");
-    Serial.println("          Name     : SprinklerSetup");
-    Serial.println("          Password : sprinkler123");
-    Serial.println("");
-    Serial.println("  STEP 2: A login page will open automatically.");
-    Serial.println("          If it does not, open your browser");
-    Serial.println("          and go to: http://192.168.4.1");
-    Serial.println("");
-    Serial.println("  STEP 3: On that page, enter your HOME WiFi");
-    Serial.println("          network name and password, then tap Save.");
-    Serial.println("");
-    Serial.println("  Waiting for you to complete setup...");
-    Serial.println("================================================");
-    Serial.println("");
+  if (hasCredentials) {
+    // ── Returning user — reconnect with saved credentials ───────
+    Serial.println("[WIFI] Reconnecting with saved credentials...");
+    WiFi.begin();
+    uint32_t t = millis();
+    while (WiFi.status() != WL_CONNECTED && millis() - t < 15000) { delay(200); }
+
+    if (WiFi.status() == WL_CONNECTED) {
+      if (MDNS.begin(HOSTNAME)) MDNS.addService("http", "tcp", 80);
+      Serial.printf("[WIFI] Connected. IP: %s  |  http://sprinkler.local\n",
+                    WiFi.localIP().toString().c_str());
+      return;
+    }
+    // Could not reconnect (router changed, wrong password?)
+    Serial.println("[WIFI] Could not reconnect — opening setup portal...");
+
+  } else {
+    // ── First install — try Improv dialog in the browser first ──
+    Serial.println("[WIFI] No saved credentials.");
+    Serial.println("[WIFI] If your browser shows a 'Configure Wi-Fi' dialog,");
+    Serial.println("[WIFI] select your network and enter the password there.");
+    Serial.println("[WIFI] Waiting 60 s for browser... (or use hotspot below)");
+
+    if (runImprovSerial(60000)) return;   // Browser provisioned WiFi — done
   }
 
+  // ── Fallback: WiFiManager captive portal ─────────────────────
+  Serial.println("");
+  Serial.println("================================================");
+  Serial.println("  SprinKlr-8 — Hotspot Setup");
+  Serial.println("================================================");
+  Serial.println("  1. Phone: Settings > WiFi");
+  Serial.println("     Connect to : SprinklerSetup");
+  Serial.println("     Password   : sprinkler123");
+  Serial.println("  2. Login page opens — enter your home WiFi");
+  Serial.println("     name + password, then tap Save.");
+  Serial.println("  3. Reconnect phone to your home WiFi.");
+  Serial.println("  4. Open: http://sprinkler.local");
+  Serial.println("================================================");
+
   WiFiManager wm;
-  wm.setConfigPortalTimeout(180); // 3 min portal timeout, then continue
+  wm.setDebugOutput(false);        // ← silences the serial flood
+  wm.setConfigPortalTimeout(180);  // 3 min, then offline mode
 
   bool connected = wm.autoConnect(AP_NAME, AP_PASSWORD);
-
   if (connected) {
-    if (MDNS.begin(HOSTNAME)) {
-      MDNS.addService("http", "tcp", 80);
-    }
-    Serial.println("");
-    Serial.println("================================================");
-    Serial.println("  SUCCESS — Board is on your home network!");
-    Serial.println("================================================");
-    Serial.println("");
-    Serial.println("  STEP 4: On your phone go to Settings > WiFi");
-    Serial.printf( "          and reconnect to your home network.\n");
-    Serial.println("");
-    Serial.println("  STEP 5: Open your browser and go to:");
-    Serial.println("          http://sprinkler.local");
-    Serial.println("");
-    Serial.println("  If sprinkler.local does not load, try:");
-    Serial.printf( "          http://%s\n", WiFi.localIP().toString().c_str());
-    Serial.println("");
-    Serial.println("  STEP 6: The SprinKlr-8 dashboard will open.");
-    Serial.println("          Bookmark it for easy access next time.");
-    Serial.println("");
-    Serial.println("================================================");
-    Serial.println("");
+    if (MDNS.begin(HOSTNAME)) MDNS.addService("http", "tcp", 80);
+    Serial.printf("\n[WIFI] Connected. IP: %s  |  http://sprinkler.local\n",
+                  WiFi.localIP().toString().c_str());
   } else {
-    Serial.println("[WIFI] Portal timed out, running in offline mode");
+    Serial.println("[WIFI] Portal timed out — running offline");
   }
 }
 
