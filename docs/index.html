@@ -569,15 +569,24 @@
     }
   }
 
-  // Watch for the ESP Web Tools install dialog to close after a successful flash
   document.addEventListener('DOMContentLoaded', () => {
+    // Disconnect monitor when Install is clicked so the install button
+    // has exclusive access to the serial port for Improv detection.
+    const activateBtn = document.querySelector('esp-web-install-button button[slot="activate"]');
+    if (activateBtn) {
+      activateBtn.addEventListener('click', () => {
+        if (monitorActive) monitorDisconnect();
+      });
+    }
+
     const btn = document.querySelector('esp-web-install-button');
     if (!btn) return;
     btn.addEventListener('state-changed', (e) => {
       if (e.detail && e.detail.state === 'finished') {
-        // Board rebooting — wait 3 s then auto-connect
-        setStatus('Flashing complete! Waiting for board to restart...');
-        setTimeout(tryAutoConnect, 3000);
+        // Improv runs for up to 30 s after flash — wait until it's done
+        // before auto-connecting the monitor so ports don't conflict.
+        setStatus('Flashing complete! Connecting to boot log in 35 seconds...');
+        setTimeout(tryAutoConnect, 35000);
       }
     });
   });
