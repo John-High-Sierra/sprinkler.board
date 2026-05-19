@@ -40,6 +40,7 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include <WiFiManager.h>
+#include "html_content.h"
 #include <ESPmDNS.h>
 #include <WebServer.h>
 #include <ArduinoOTA.h>
@@ -82,7 +83,7 @@ const int RELAY_PINS[8] = {32, 33, 25, 26, 27, 14, 12, 13};
 #define AP_PASSWORD    "sprinkler123"
 #define NTP_SERVER     "pool.ntp.org"
 #define OTA_PASSWORD   "sprinkler123"  // Password for Arduino IDE OTA and web UI upload
-#define FW_VERSION     "1.3.0"  // Improv WiFi Serial — browser-based WiFi config
+#define FW_VERSION     "1.4.0"  // HTML embedded in firmware — single upload, no LittleFS needed
 
 // Cloud update URLs — point these at your GitHub repo
 #define CLOUD_UI_URL  "https://raw.githubusercontent.com/John-High-Sierra/sprinkler.board/main/esp32_firmware/sprinkler_controller/data/index.html"
@@ -505,9 +506,13 @@ void serveFile(const char* path, const char* contentType) {
 // ═══════════════════════════════════════════════════════════════
 void setupRoutes() {
 
-  // ── Serve frontend ────────────────────────────────────────────
-  server.on("/", HTTP_GET, []() { serveFile("/index.html", "text/html"); });
-  server.on("/index.html", HTTP_GET, []() { serveFile("/index.html", "text/html"); });
+  // ── Serve frontend (embedded in firmware — no LittleFS needed) ─
+  server.on("/", HTTP_GET, []() {
+    server.send_P(200, "text/html", INDEX_HTML);
+  });
+  server.on("/index.html", HTTP_GET, []() {
+    server.send_P(200, "text/html", INDEX_HTML);
+  });
 
   // ── GET /api/status ───────────────────────────────────────────
   server.on("/api/status", HTTP_GET, []() {
@@ -1044,254 +1049,72 @@ void checkWiFiReset() {
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  IMPROV WIFI SERIAL — inline implementation (no library needed)
-//  Protocol spec: https://www.improv-wifi.com/serial/
-//  ESP Web Tools detects these packets and shows "Configure Wi-Fi"
-// ═══════════════════════════════════════════════════════════════
-namespace ImprovSerial {
-
-  // ── Packet types ─────────────────────────────────────────────
-  static const uint8_t TYPE_CURRENT_STATE  = 0x01;
-  static const uint8_t TYPE_ERROR_STATE    = 0x02;
-  static const uint8_t TYPE_RPC_COMMAND    = 0x03;
-  static const uint8_t TYPE_RPC_RESULT     = 0x04;
-
-  // ── States ───────────────────────────────────────────────────
-  static const uint8_t STATE_AUTHORIZED    = 0x02;  // ready, waiting for creds
-  static const uint8_t STATE_PROVISIONING  = 0x03;  // connecting...
-  static const uint8_t STATE_PROVISIONED   = 0x04;  // connected
-
-  // ── Errors ───────────────────────────────────────────────────
-  static const uint8_t ERR_UNABLE_CONNECT  = 0x03;
-
-  // ── RPC commands ─────────────────────────────────────────────
-  static const uint8_t CMD_WIFI_SETTINGS   = 0x01;
-  static const uint8_t CMD_IDENTIFY        = 0x02;
-  static const uint8_t CMD_GET_DEVICE_INFO = 0x03;
-  static const uint8_t CMD_GET_WIFI_NETS   = 0x04;
-
-  static const uint8_t HDR[6] = {'I','M','P','R','O','V'};
-  static const uint8_t VER    = 0x01;
-
-  // ── Parser state machine ─────────────────────────────────────
-  enum ParseStep { PS_HEADER, PS_VERSION, PS_TYPE, PS_LENGTH, PS_DATA, PS_CHECKSUM };
-  static ParseStep  ps          = PS_HEADER;
-  static int        hdrPos      = 0;
-  static uint8_t    pktType     = 0;
-  static uint8_t    pktLen      = 0;
-  static uint8_t    pktData[128];
-  static int        dataIdx     = 0;
-  static uint8_t    calcSum     = 0;
-  static uint32_t   lastState   = 0;
-
-  // ── Send a raw Improv packet ──────────────────────────────────
-  void sendPacket(uint8_t type, const uint8_t* data, uint8_t len) {
-    uint8_t sum = VER + type + len;
-    for (int i = 0; i < len; i++) sum += data[i];
-    Serial.write(HDR, 6);
-    Serial.write(VER);
-    Serial.write(type);
-    Serial.write(len);
-    if (len) Serial.write(data, len);
-    Serial.write(sum);
-    Serial.flush();
-  }
-
-  void sendState(uint8_t state) {
-    sendPacket(TYPE_CURRENT_STATE, &state, 1);
-  }
-
-  void sendError(uint8_t err) {
-    sendPacket(TYPE_ERROR_STATE, &err, 1);
-  }
-
-  // ── Build length-prefixed string into buffer ──────────────────
-  static int appendStr(uint8_t* buf, int pos, const char* s) {
-    uint8_t l = (uint8_t)strlen(s);
-    buf[pos++] = l;
-    memcpy(buf + pos, s, l);
-    return pos + l;
-  }
-
-  // ── Process an incoming RPC command ──────────────────────────
-  void processCommand(const uint8_t* data, uint8_t len) {
-    if (len == 0) return;
-    uint8_t cmd = data[0];
-
-    if (cmd == CMD_IDENTIFY) {
-      // Blink LED so user can identify the device
-      for (int i = 0; i < 8; i++) {
-        digitalWrite(STATUS_LED_PIN, HIGH); delay(80);
-        digitalWrite(STATUS_LED_PIN, LOW);  delay(80);
-      }
-    }
-    else if (cmd == CMD_GET_DEVICE_INFO) {
-      uint8_t buf[128];
-      int pos = 0;
-      buf[pos++] = CMD_GET_DEVICE_INFO;
-      pos = appendStr(buf, pos, "SprinKlr-8 Sprinkler Controller");
-      pos = appendStr(buf, pos, FW_VERSION);
-      pos = appendStr(buf, pos, "ESP32");
-      pos = appendStr(buf, pos, "SprinKlr-8");
-      sendPacket(TYPE_RPC_RESULT, buf, pos);
-    }
-    else if (cmd == CMD_GET_WIFI_NETS) {
-      WiFi.scanDelete();
-      int n = WiFi.scanNetworks(false, true);  // async=false, show hidden=true
-      uint8_t buf[512];
-      int pos = 0;
-      buf[pos++] = CMD_GET_WIFI_NETS;
-      for (int i = 0; i < n && i < 10 && pos < 480; i++) {
-        String ssid = WiFi.SSID(i);
-        int rssi = (int)WiFi.RSSI(i);
-        uint8_t rssiNorm = (uint8_t)max(0, min(100, rssi + 100));
-        bool secured = (WiFi.encryptionType(i) != WIFI_AUTH_OPEN);
-        pos = appendStr(buf, pos, ssid.c_str());
-        buf[pos++] = rssiNorm;
-        buf[pos++] = secured ? 1 : 0;
-      }
-      sendPacket(TYPE_RPC_RESULT, buf, pos);
-    }
-    else if (cmd == CMD_WIFI_SETTINGS) {
-      // data: [cmd][ssid_len][ssid...][pass_len][pass...]
-      if (len < 3) return;
-      int i = 1;
-      uint8_t ssidLen = data[i++];
-      char ssid[65] = {0};
-      memcpy(ssid, data + i, min((int)ssidLen, 64));  i += ssidLen;
-      uint8_t passLen = data[i++];
-      char pass[65] = {0};
-      memcpy(pass, data + i, min((int)passLen, 64));
-
-      Serial.printf("[IMPROV] Connecting to: %s\n", ssid);
-      sendState(STATE_PROVISIONING);
-
-      WiFi.begin(ssid, pass);
-      uint32_t t = millis();
-      while (WiFi.status() != WL_CONNECTED && millis() - t < 15000) {
-        delay(200);
-      }
-
-      if (WiFi.status() == WL_CONNECTED) {
-        if (MDNS.begin(HOSTNAME)) MDNS.addService("http", "tcp", 80);
-        Serial.printf("[IMPROV] Connected! IP: %s\n", WiFi.localIP().toString().c_str());
-        sendState(STATE_PROVISIONED);
-        // Send URL so browser shows "Visit Device" button
-        const char* url = "http://sprinkler.local";
-        uint8_t rbuf[64];
-        int pos = 0;
-        rbuf[pos++] = CMD_WIFI_SETTINGS;
-        pos = appendStr(rbuf, pos, url);
-        sendPacket(TYPE_RPC_RESULT, rbuf, pos);
-      } else {
-        Serial.println("[IMPROV] Failed to connect");
-        sendError(ERR_UNABLE_CONNECT);
-        sendState(STATE_AUTHORIZED);
-      }
-    }
-  }
-
-  // ── Feed one byte into the parser ────────────────────────────
-  void parseByte(uint8_t b) {
-    switch (ps) {
-      case PS_HEADER:
-        if (b == HDR[hdrPos]) { hdrPos++; if (hdrPos == 6) { hdrPos = 0; ps = PS_VERSION; } }
-        else                  { hdrPos = (b == HDR[0]) ? 1 : 0; }
-        break;
-      case PS_VERSION:
-        calcSum = b; ps = PS_TYPE;
-        break;
-      case PS_TYPE:
-        pktType = b; calcSum += b; ps = PS_LENGTH;
-        break;
-      case PS_LENGTH:
-        pktLen = b; calcSum += b; dataIdx = 0;
-        ps = (b > 0) ? PS_DATA : PS_CHECKSUM;
-        break;
-      case PS_DATA:
-        if (dataIdx < 128) pktData[dataIdx] = b;
-        calcSum += b;
-        if (++dataIdx >= pktLen) ps = PS_CHECKSUM;
-        break;
-      case PS_CHECKSUM:
-        if (b == calcSum && pktType == TYPE_RPC_COMMAND)
-          processCommand(pktData, pktLen);
-        ps = PS_HEADER;
-        break;
-    }
-  }
-
-  // ── Call from loop() — handles serial + periodic state beacon ─
-  void handle() {
-    // Broadcast current state every second so ESP Web Tools can detect firmware
-    uint32_t now = millis();
-    if (now - lastState >= 1000) {
-      lastState = now;
-      uint8_t state = (WiFi.status() == WL_CONNECTED) ? STATE_PROVISIONED : STATE_AUTHORIZED;
-      sendState(state);
-    }
-    while (Serial.available()) parseByte((uint8_t)Serial.read());
-  }
-
-} // namespace ImprovSerial
-
-// ═══════════════════════════════════════════════════════════════
-//  WIFI SETUP
+//  WIFI SETUP (WiFiManager captive portal)
 // ═══════════════════════════════════════════════════════════════
 void setupWiFi() {
   WiFi.setHostname(HOSTNAME);
+
+  // Check if we already have saved credentials (returning user)
   WiFi.mode(WIFI_STA);
   bool hasCredentials = (WiFi.SSID().length() > 0);
 
-  if (hasCredentials) {
-    Serial.println("[WIFI] Reconnecting with saved credentials...");
-    WiFi.begin();
-    uint32_t t = millis();
-    while (WiFi.status() != WL_CONNECTED && millis() - t < 15000) { delay(200); }
-
-    if (WiFi.status() == WL_CONNECTED) {
-      if (MDNS.begin(HOSTNAME)) MDNS.addService("http", "tcp", 80);
-      Serial.printf("[WIFI] Connected. IP: %s\n", WiFi.localIP().toString().c_str());
-      Serial.println("[WIFI] Dashboard: http://sprinkler.local");
-      return;  // Improv::handle() in loop() broadcasts provisioned state
-    }
-    Serial.println("[WIFI] Could not reconnect — waiting for Improv / portal...");
+  if (!hasCredentials) {
+    // ── First-time setup instructions ──────────────────────────
+    Serial.println("");
+    Serial.println("================================================");
+    Serial.println("  SprinKlr-8 — First Time Setup");
+    Serial.println("================================================");
+    Serial.println("");
+    Serial.println("  The board has opened a temporary WiFi hotspot.");
+    Serial.println("");
+    Serial.println("  STEP 1: On your phone go to Settings > WiFi");
+    Serial.println("          and connect to this network:");
+    Serial.println("          Name     : SprinklerSetup");
+    Serial.println("          Password : sprinkler123");
+    Serial.println("");
+    Serial.println("  STEP 2: A login page will open automatically.");
+    Serial.println("          If it does not, open your browser");
+    Serial.println("          and go to: http://192.168.4.1");
+    Serial.println("");
+    Serial.println("  STEP 3: On that page, enter your HOME WiFi");
+    Serial.println("          network name and password, then tap Save.");
+    Serial.println("");
+    Serial.println("  Waiting for you to complete setup...");
+    Serial.println("================================================");
+    Serial.println("");
   }
 
-  Serial.println("================================================");
-  Serial.println("  SprinKlr-8 — WiFi Setup");
-  Serial.println("================================================");
-  Serial.println("  Option 1 (browser — recommended):");
-  Serial.println("    Open setup page, click CONNECT,");
-  Serial.println("    then click Configure Wi-Fi.");
-  Serial.println("  Option 2 (phone / tablet):");
-  Serial.println("    Settings > WiFi > SprinklerSetup");
-  Serial.println("    Password: sprinkler123");
-  Serial.println("    A login page opens. Enter home WiFi details.");
-  Serial.println("================================================");
-
-  // Wait up to 60 s for Improv (browser) to supply credentials
-  unsigned long improvTimeout = millis();
-  while (WiFi.status() != WL_CONNECTED && millis() - improvTimeout < 60000) {
-    ImprovSerial::handle();
-    delay(10);
-  }
-
-  if (WiFi.status() == WL_CONNECTED) return;  // Improv handled it
-
-  // Fall back to WiFiManager captive portal
-  Serial.println("[WIFI] Improv timed out — opening WiFiManager portal...");
   WiFiManager wm;
   wm.setDebugOutput(false);
-  wm.setConfigPortalTimeout(180);
+  wm.setConfigPortalTimeout(0); // 0 = no timeout, portal stays open indefinitely
 
   bool connected = wm.autoConnect(AP_NAME, AP_PASSWORD);
+
   if (connected) {
-    if (MDNS.begin(HOSTNAME)) MDNS.addService("http", "tcp", 80);
-    Serial.printf("[WIFI] Connected. IP: %s\n", WiFi.localIP().toString().c_str());
-    Serial.println("[WIFI] Dashboard: http://sprinkler.local");
+    if (MDNS.begin(HOSTNAME)) {
+      MDNS.addService("http", "tcp", 80);
+    }
+    Serial.println("");
+    Serial.println("================================================");
+    Serial.println("  SUCCESS — Board is on your home network!");
+    Serial.println("================================================");
+    Serial.println("");
+    Serial.println("  STEP 4: On your phone go to Settings > WiFi");
+    Serial.printf( "          and reconnect to your home network.\n");
+    Serial.println("");
+    Serial.println("  STEP 5: Open your browser and go to:");
+    Serial.println("          http://sprinkler.local");
+    Serial.println("");
+    Serial.println("  If sprinkler.local does not load, try:");
+    Serial.printf( "          http://%s\n", WiFi.localIP().toString().c_str());
+    Serial.println("");
+    Serial.println("  STEP 6: The SprinKlr-8 dashboard will open.");
+    Serial.println("          Bookmark it for easy access next time.");
+    Serial.println("");
+    Serial.println("================================================");
+    Serial.println("");
   } else {
-    Serial.println("[WIFI] Portal timed out — running offline");
+    Serial.println("[WIFI] Portal timed out, running in offline mode");
   }
 }
 
@@ -1395,7 +1218,6 @@ void setup() {
 //  LOOP (real work is in FreeRTOS tasks and web server callbacks)
 // ═══════════════════════════════════════════════════════════════
 void loop() {
-  ImprovSerial::handle();  // Improv: firmware detection + WiFi provisioning
   ArduinoOTA.handle();
   server.handleClient();
   delay(10);

@@ -1,0 +1,809 @@
+// Auto-generated — do not edit. Rebuild from data/index.html
+static const char INDEX_HTML[] PROGMEM = R"====(
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>SprinKlr-8</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+body { font-family: 'Segoe UI', system-ui, sans-serif; background: #0f1923; color: #e8eaf0; min-height: 100vh; padding-bottom: 80px; font-size: 19px; }
+
+/* ── Header ───────────────────────────────────────────── */
+header { background: #131f2e; padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid #1a3a5c; position: sticky; top: 0; z-index: 100; }
+.hdr-left h1 { font-size: 1.3rem; color: #4fc3f7; font-weight: 700; letter-spacing: 0.5px; }
+.hdr-right { display: flex; align-items: center; gap: 8px; }
+.hdr-time { font-size: 1.4rem; font-weight: 700; color: #e0e0e0; font-variant-numeric: tabular-nums; }
+.led { width: 11px; height: 11px; border-radius: 50%; background: #4caf50; animation: pulse 2s infinite; flex-shrink: 0; }
+.led.offline { background: #555; animation: none; }
+.led.running { background: #f0a500; }
+@keyframes pulse { 0%,100%{opacity:1}50%{opacity:0.35} }
+
+/* ── Pages ────────────────────────────────────────────── */
+.page { display: none; padding: 14px 14px 4px; }
+.page.active { display: block; }
+
+/* ── Running banner ───────────────────────────────────── */
+.run-banner { border-radius: 14px; padding: 16px; margin-bottom: 14px; border: 2px solid #1a3a5c; background: #131f2e; }
+.run-banner.active { border-color: #4caf50; background: #0d1f0f; }
+.run-banner.active .rb-label { color: #81c784; }
+.rb-label { font-size: 0.95rem; text-transform: uppercase; letter-spacing: 1px; color: #90caf9; font-weight: 700; margin-bottom: 4px; }
+.rb-zone { font-size: 1.7rem; font-weight: 700; color: #e8eaf0; margin-bottom: 10px; }
+.rb-zone span { color: #4caf50; }
+.rb-timer { font-size: 1.35rem; color: #81c784; font-weight: 700; margin-bottom: 10px; font-variant-numeric: tabular-nums; }
+.rb-idle { font-size: 1.1rem; color: #607080; margin-bottom: 8px; }
+.progress-bar { height: 8px; background: #1a2a1a; border-radius: 4px; overflow: hidden; margin-bottom: 12px; }
+.progress-fill { height: 100%; background: linear-gradient(90deg,#2e7d32,#66bb6a); border-radius: 4px; transition: width 1s linear; }
+.btn-stop-seq { width: 100%; padding: 14px; border: none; border-radius: 10px; background: #b71c1c; color: #fff; font-size: 1.15rem; font-weight: 700; cursor: pointer; min-height: 58px; font-family: inherit; }
+.btn-stop-seq:active { opacity: 0.75; }
+
+/* ── Section headers ──────────────────────────────────── */
+.sec-hdr { display: flex; align-items: center; justify-content: space-between; margin: 16px 0 10px; }
+.sec-title { font-size: 0.95rem; color: #90caf9; text-transform: uppercase; letter-spacing: 1.5px; font-weight: 700; }
+
+/* ── Schedule toggle ──────────────────────────────────── */
+.sched-master { display: flex; align-items: center; justify-content: space-between; background: #131f2e; border: 1px solid #1a3a5c; border-radius: 12px; padding: 14px 16px; margin-bottom: 14px; }
+.sched-master-label { font-size: 1.15rem; font-weight: 600; }
+.sched-master-sub { font-size: 0.95rem; color: #607080; margin-top: 2px; }
+.tog { width: 52px; height: 28px; background: #2a3a4a; border-radius: 14px; position: relative; cursor: pointer; flex-shrink: 0; transition: background 0.25s; }
+.tog.on { background: #2e7d32; }
+.tog::after { content:''; position:absolute; width:24px; height:24px; background:#fff; border-radius:50%; top:2px; left:2px; transition:left 0.25s; box-shadow:0 1px 4px #0006; }
+.tog.on::after { left:26px; }
+
+/* ── Schedule cards ───────────────────────────────────── */
+.sched-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px; }
+.sched-card { background: #131f2e; border: 2px solid #1a3a5c; border-radius: 14px; overflow: hidden; transition: border-color 0.2s; }
+.sched-card.on { border-color: #1e5080; }
+.sched-card.now-running { border-color: #4caf50 !important; }
+.sched-card-hdr { padding: 15px 16px; display: flex; align-items: center; gap: 12px; cursor: pointer; user-select: none; }
+.sched-day-name { font-weight: 700; font-size: 1.2rem; flex: 1; }
+.sched-card.now-running .sched-day-name { color: #81c784; }
+.sched-time { font-size: 1.25rem; color: #4fc3f7; font-weight: 700; font-variant-numeric: tabular-nums; }
+.sched-card:not(.on) .sched-time { color: #3a4a5a; }
+.sched-body { display: none; padding: 0 16px 16px; border-top: 1px solid #1a3a5c; }
+.sched-body.open { display: block; padding-top: 14px; }
+
+.time-row { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
+.time-row label { font-size: 0.95rem; color: #90caf9; text-transform: uppercase; letter-spacing: 0.5px; flex-shrink: 0; font-weight: 600; }
+.t-inp { background: #0f3460; border: 2px solid #1a4a7a; color: #eee; padding: 10px 12px; border-radius: 10px; font-size: 1.2rem; text-align: center; width: 72px; font-family: inherit; }
+.t-inp:focus { outline: none; border-color: #4fc3f7; }
+.sep { color: #4fc3f7; font-size: 1.3rem; font-weight: bold; }
+.ampm-sel { width: 84px !important; padding-left: 8px; padding-right: 4px; }
+
+.zones-lbl { font-size: 0.95rem; color: #90caf9; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; margin-bottom: 8px; }
+.zone-dur-row { display: flex; align-items: center; gap: 10px; padding: 12px 12px; border-radius: 10px; margin-bottom: 8px; background: #0d1620; border: 1px solid transparent; transition: background 0.3s, border-color 0.3s; }
+.zone-dur-row.zone-active { background: #0d200f; border-color: #4caf50; }
+.zdr-num { font-size: 0.9rem; color: #4a6070; font-weight: 700; width: 24px; flex-shrink: 0; }
+.zdr-name { flex: 1; font-size: 1.1rem; font-weight: 600; color: #ccd6e0; }
+.zone-dur-row.zone-active .zdr-name { color: #81c784; }
+.zdr-inp-wrap { display: flex; align-items: center; gap: 6px; }
+.zdr-inp { background: #0f3460; border: 2px solid #1a4a7a; color: #eee; padding: 10px 8px; border-radius: 8px; font-size: 1.15rem; text-align: center; width: 70px; font-family: inherit; }
+.zdr-inp:focus { outline: none; border-color: #4fc3f7; }
+.zone-dur-row.zone-active .zdr-inp { border-color: #4caf50; }
+.zdr-unit { font-size: 0.95rem; color: #607080; }
+.running-badge { font-size: 0.85rem; font-weight: 700; color: #4caf50; background: #0d200f; border: 1px solid #4caf50; border-radius: 6px; padding: 3px 8px; }
+
+.run-day-btn { display: block; width: 100%; text-align: center; padding: 14px; background: #0f3460; border: 2px solid #1a4a7a; border-radius: 10px; color: #4fc3f7; font-size: 1.1rem; font-weight: 700; cursor: pointer; margin-top: 10px; font-family: inherit; }
+.run-day-btn:active { background: #1565c0; border-color: #1565c0; }
+
+.save-btn { width: 100%; padding: 16px; border: none; border-radius: 12px; background: #1565c0; color: #fff; font-size: 1.2rem; font-weight: 700; cursor: pointer; min-height: 60px; font-family: inherit; margin-bottom: 6px; }
+.save-btn:active { opacity: 0.8; }
+
+/* ── Buttons general ──────────────────────────────────── */
+.btn-full { width: 100%; padding: 16px; border: none; border-radius: 12px; font-size: 1.2rem; font-weight: 700; cursor: pointer; min-height: 60px; margin-bottom: 10px; font-family: inherit; transition: opacity 0.15s; color: #fff; }
+.btn-full:active { opacity: 0.75; }
+.btn-green  { background: #2e7d32; }
+.btn-red    { background: #b71c1c; }
+.btn-blue   { background: #1565c0; }
+.btn-orange { background: #e65100; }
+
+/* ── Manual page ──────────────────────────────────────── */
+.card { background: #131f2e; border: 2px solid #1a3a5c; border-radius: 14px; padding: 16px; margin-bottom: 14px; }
+.form-group { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+.form-group label { font-size: 0.95rem; color: #90caf9; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 700; }
+select, input[type="number"] { background: #0f2030; border: 2px solid #1a4a7a; color: #eee; padding: 14px 16px; border-radius: 10px; font-size: 1.15rem; width: 100%; min-height: 58px; font-family: inherit; -webkit-appearance: none; appearance: none; }
+select:focus, input[type="number"]:focus { outline: none; border-color: #4fc3f7; }
+
+/* ── Settings page ────────────────────────────────────── */
+.settings-section { background: #131f2e; border: 2px solid #1a3a5c; border-radius: 14px; margin-bottom: 14px; overflow: hidden; }
+.settings-row { display: flex; align-items: center; justify-content: space-between; padding: 15px 16px; border-bottom: 1px solid #1a3a5c; gap: 12px; }
+.settings-row:last-child { border-bottom: none; }
+.settings-label { font-size: 1.1rem; font-weight: 600; flex-shrink: 0; }
+.settings-val { font-size: 1.05rem; color: #4fc3f7; font-weight: 600; text-align: right; }
+.zname-inp { background: #0f2030; border: 2px solid #1a4a7a; color: #eee; padding: 10px 12px; border-radius: 8px; font-size: 1.1rem; width: 60%; font-family: inherit; }
+.zname-inp:focus { outline: none; border-color: #4fc3f7; }
+.upd-btn { width:100%; padding:13px; background:#1a3a5c; color:#4fc3f7; border:2px solid #1a5a8c; border-radius:10px; font-size:1.05rem; font-weight:700; cursor:pointer; font-family:inherit; }
+.upd-btn:active { opacity:0.75; }
+.upd-btn:disabled { opacity:0.4; cursor:not-allowed; }
+
+/* ── Sys Status page ──────────────────────────────────── */
+.stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
+.stat-card { background: #131f2e; border: 2px solid #1a3a5c; border-radius: 14px; padding: 16px; }
+.stat-label { font-size: 0.9rem; color: #90caf9; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 700; margin-bottom: 6px; }
+.stat-value { font-size: 1.5rem; font-weight: 700; color: #4fc3f7; }
+.stat-value.green { color: #81c784; }
+.stat-sub { font-size: 0.9rem; color: #607080; margin-top: 4px; }
+.copyright-box { background: #131f2e; border: 2px solid #1a3a5c; border-radius: 14px; padding: 18px; text-align: center; }
+.copyright-box h2 { font-size: 1.35rem; color: #4fc3f7; margin-bottom: 6px; }
+.copyright-box p { font-size: 1rem; color: #607080; margin-bottom: 4px; }
+.copyright-box .version { font-size: 0.95rem; color: #4fc3f7; margin-top: 8px; }
+
+/* ── Bottom nav ───────────────────────────────────────── */
+.bottom-nav { position: fixed; bottom: 0; left: 0; right: 0; background: #131f2e; border-top: 2px solid #1a3a5c; display: flex; z-index: 200; }
+.nav-btn { flex: 1; padding: 10px 4px 14px; text-align: center; cursor: pointer; border: none; background: none; color: #607080; transition: color 0.2s; font-family: inherit; }
+.nav-btn.active { color: #4fc3f7; }
+.nav-btn:active { opacity: 0.7; }
+.nav-icon { font-size: 1.6rem; display: block; margin-bottom: 2px; }
+.nav-label { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; }
+
+/* ── Toast ────────────────────────────────────────────── */
+#toasts { position: fixed; bottom: 80px; right: 12px; display: flex; flex-direction: column; gap: 7px; z-index: 999; pointer-events: none; }
+.toast { padding: 13px 18px; border-radius: 10px; font-size: 1.05rem; font-weight: 600; animation: tin .3s ease, tout .3s ease 2.7s forwards; max-width: 280px; }
+.toast.ok  { background: #2e7d32; color: #fff; }
+.toast.err { background: #b71c1c; color: #fff; }
+@keyframes tin  { from { opacity:0; transform:translateY(8px); } }
+@keyframes tout { to   { opacity:0; transform:translateY(8px); } }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="hdr-left"><h1>💧 SprinKlr-8</h1></div>
+  <div class="hdr-right">
+    <span class="hdr-time" id="hdr-time">--:--</span>
+    <div class="led" id="led"></div>
+  </div>
+</header>
+
+<!-- ══ SCHEDULE (default page) ════════════════════════════ -->
+<div class="page active" id="page-schedule">
+
+  <!-- Running status banner -->
+  <div class="run-banner" id="runBanner">
+    <div class="rb-label" id="rb-label">System Status</div>
+    <div class="rb-zone" id="rb-zone">Idle</div>
+    <div class="progress-bar" id="rb-prog-wrap" style="display:none">
+      <div class="progress-fill" id="rb-prog" style="width:0%"></div>
+    </div>
+    <div class="rb-timer" id="rb-timer" style="display:none"></div>
+    <button class="btn-stop-seq" id="rb-stop-btn" style="display:none" onclick="stopAll()">■ Stop Sequence</button>
+  </div>
+
+  <!-- Schedule enabled toggle -->
+  <div class="sched-master">
+    <div>
+      <div class="sched-master-label">Auto Schedule</div>
+      <div class="sched-master-sub" id="sched-master-sub">Loading...</div>
+    </div>
+    <div class="tog" id="schedTog" onclick="toggleSched()"></div>
+  </div>
+
+  <div class="sched-list" id="schedList"></div>
+
+  <button class="save-btn" onclick="saveSchedule()">💾 Save Schedule</button>
+</div>
+
+<!-- ══ MANUAL ═════════════════════════════════════════════ -->
+<div class="page" id="page-manual">
+
+  <div class="card">
+    <div class="sec-title" style="margin-bottom:14px">Run Single Zone</div>
+    <div class="form-group">
+      <label>Zone</label>
+      <select id="manualZone"></select>
+    </div>
+    <div class="form-group">
+      <label>Duration (minutes)</label>
+      <input type="number" id="manualDur" value="10" min="1" max="120">
+    </div>
+    <button class="btn-full btn-green" onclick="manualRun()">▶ Start Zone</button>
+  </div>
+
+  <div class="card">
+    <div class="sec-title" style="margin-bottom:14px">Run Day Sequence</div>
+    <div class="form-group">
+      <label>Day</label>
+      <select id="manualDay">
+        <option value="0">Monday</option><option value="1">Tuesday</option>
+        <option value="2">Wednesday</option><option value="3">Thursday</option>
+        <option value="4">Friday</option><option value="5">Saturday</option>
+        <option value="6">Sunday</option>
+      </select>
+    </div>
+    <button class="btn-full btn-blue" onclick="runDaySeq()">▶ Run Day Sequence</button>
+  </div>
+
+  <button class="btn-full btn-red" onclick="stopAll()">■ Stop All</button>
+</div>
+
+<!-- ══ SETTINGS ═══════════════════════════════════════════ -->
+<div class="page" id="page-settings">
+  <div class="sec-hdr"><span class="sec-title">System</span></div>
+  <div class="settings-section">
+    <div class="settings-row">
+      <span class="settings-label">IP Address</span>
+      <span class="settings-val" id="set-ip">—</span>
+    </div>
+    <div class="settings-row">
+      <span class="settings-label">WiFi</span>
+      <span class="settings-val" id="set-wifi">—</span>
+    </div>
+    <div class="settings-row">
+      <span class="settings-label">Zones</span>
+      <span class="settings-val">8</span>
+    </div>
+  </div>
+
+  <div class="sec-hdr"><span class="sec-title">Timezone</span></div>
+  <div class="settings-section">
+    <div class="settings-row" style="flex-direction:column;align-items:flex-start;gap:12px">
+      <span class="settings-label">Local Timezone</span>
+      <select id="tz-select" style="width:100%">
+        <option value="UTC0">UTC (Coordinated Universal Time)</option>
+        <optgroup label="United States">
+          <option value="EST5EDT,M3.2.0,M11.1.0">US Eastern (EST/EDT)</option>
+          <option value="CST6CDT,M3.2.0,M11.1.0">US Central (CST/CDT)</option>
+          <option value="MST7MDT,M3.2.0,M11.1.0">US Mountain (MST/MDT)</option>
+          <option value="MST7">US Mountain – Arizona (no DST)</option>
+          <option value="PST8PDT,M3.2.0,M11.1.0">US Pacific (PST/PDT)</option>
+          <option value="AKST9AKDT,M3.2.0,M11.1.0">US Alaska (AKST/AKDT)</option>
+          <option value="HST10">US Hawaii (no DST)</option>
+        </optgroup>
+        <optgroup label="Canada">
+          <option value="EST5EDT,M3.2.0,M11.1.0">Canada Eastern (EST/EDT)</option>
+          <option value="CST6CDT,M3.2.0,M11.1.0">Canada Central (CST/CDT)</option>
+          <option value="MST7MDT,M3.2.0,M11.1.0">Canada Mountain (MST/MDT)</option>
+          <option value="PST8PDT,M3.2.0,M11.1.0">Canada Pacific (PST/PDT)</option>
+        </optgroup>
+        <optgroup label="Europe">
+          <option value="GMT0BST,M3.5.0/1,M10.5.0">UK (GMT/BST)</option>
+          <option value="CET-1CEST,M3.5.0,M10.5.0/3">Central Europe (CET/CEST)</option>
+          <option value="EET-2EEST,M3.5.0/3,M10.5.0/4">Eastern Europe (EET/EEST)</option>
+        </optgroup>
+        <optgroup label="Australia">
+          <option value="AEST-10AEDT,M10.1.0,M4.1.0/3">Australia Eastern (AEST/AEDT)</option>
+          <option value="ACST-9:30ACDT,M10.1.0,M4.1.0/3">Australia Central (ACST/ACDT)</option>
+          <option value="AWST-8">Australia Western (AWST, no DST)</option>
+        </optgroup>
+        <optgroup label="Other">
+          <option value="JST-9">Japan (JST, no DST)</option>
+          <option value="CST-8">China (CST, no DST)</option>
+          <option value="IST-5:30">India (IST, no DST)</option>
+        </optgroup>
+      </select>
+      <button class="btn-full btn-blue" style="width:100%;margin:0" onclick="saveTz()">Save Timezone</button>
+    </div>
+  </div>
+
+  <div class="sec-hdr"><span class="sec-title">Zone Names</span></div>
+  <div class="settings-section" id="zoneNamesList"></div>
+
+  <div class="sec-hdr"><span class="sec-title">Updates</span></div>
+  <div class="settings-section">
+    <div class="settings-row" style="flex-direction:column;align-items:flex-start;gap:10px">
+      <div style="display:flex;justify-content:space-between;width:100%;align-items:center">
+        <span class="settings-label">Firmware</span>
+        <span class="settings-val" id="upd-fw-ver">v—</span>
+      </div>
+      <button class="upd-btn" id="btn-upd-fw" onclick="cloudUpdate('firmware')">Download &amp; Flash from GitHub</button>
+    </div>
+    <div class="settings-row" style="flex-direction:column;align-items:flex-start;gap:10px">
+      <span class="settings-label">Web UI</span>
+      <button class="upd-btn" id="btn-upd-ui" onclick="cloudUpdate('ui')">Download &amp; Apply from GitHub</button>
+    </div>
+    <div class="settings-row" id="upd-status-row" style="display:none">
+      <span id="upd-status" style="font-size:1rem;color:#4fc3f7;width:100%;text-align:center"></span>
+    </div>
+  </div>
+</div>
+
+<!-- ══ SYS STATUS ════════════════════════════════════════ -->
+<div class="page" id="page-status">
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-label">Free Heap</div>
+      <div class="stat-value green" id="ss-heap">—</div>
+      <div class="stat-sub">Available RAM</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Uptime</div>
+      <div class="stat-value" id="ss-uptime">—</div>
+      <div class="stat-sub" id="ss-uptime-s">seconds</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">NTP Sync</div>
+      <div class="stat-value green" id="ss-ntp">—</div>
+      <div class="stat-sub">Time source</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">IP Address</div>
+      <div class="stat-value" id="ss-ip" style="font-size:1rem">—</div>
+      <div class="stat-sub">Local network</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Min Free Heap</div>
+      <div class="stat-value" id="ss-minheap">—</div>
+      <div class="stat-sub">Lowest recorded</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">CPU Freq</div>
+      <div class="stat-value" id="ss-cpu">240</div>
+      <div class="stat-sub">MHz</div>
+    </div>
+  </div>
+
+  <div class="copyright-box">
+    <h2>💧 SprinKlr-8</h2>
+    <p>8-Zone ESP32 WiFi Sprinkler Controller</p>
+    <p>ESP32-WROOM-32E · REV 1.0</p>
+    <p style="margin-top:10px;color:#4fc3f7">© 2026 All Rights Reserved</p>
+    <div class="version" id="ss-fw">Firmware: v1.0.0</div>
+  </div>
+</div>
+
+<nav class="bottom-nav">
+  <button class="nav-btn active" onclick="showPage('schedule',this)">
+    <span class="nav-icon">📅</span><span class="nav-label">Schedule</span>
+  </button>
+  <button class="nav-btn" onclick="showPage('manual',this)">
+    <span class="nav-icon">▶️</span><span class="nav-label">Manual</span>
+  </button>
+  <button class="nav-btn" onclick="showPage('settings',this)">
+    <span class="nav-icon">⚙️</span><span class="nav-label">Settings</span>
+  </button>
+  <button class="nav-btn" onclick="showPage('status',this)">
+    <span class="nav-icon">📊</span><span class="nav-label">Sys Status</span>
+  </button>
+</nav>
+
+<div id="toasts"></div>
+
+<script>
+// ── Config ─────────────────────────────────────────────
+const PREVIEW = false;  // set false when deployed to ESP32
+const ZONES   = 8;
+const DAYS    = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+
+// ── Time helpers ────────────────────────────────────────
+function fmt12(h, m) {
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  const h12  = h % 12 || 12;
+  return `${h12}:${String(m).padStart(2,'0')} ${ampm}`;
+}
+function to24(h12, m, ampm) {
+  let h = parseInt(h12) || 12;
+  h = Math.min(12, Math.max(1, h));
+  if (ampm === 'AM') { if (h === 12) h = 0; }
+  else               { if (h !== 12) h += 12; }
+  return { hour: h, minute: Math.min(59, Math.max(0, parseInt(m) || 0)) };
+}
+
+// ── Zone names (localStorage) ──────────────────────────
+function getNames() {
+  try { return JSON.parse(localStorage.getItem('znames')) || Array.from({length:ZONES},(_,i)=>`Zone ${i+1}`); }
+  catch { return Array.from({length:ZONES},(_,i)=>`Zone ${i+1}`); }
+}
+function setNames(n) { localStorage.setItem('znames', JSON.stringify(n)); }
+
+// ── Mock data ──────────────────────────────────────────
+let mStat   = {is_running:false,day_index:-1,active_sprinkler:-1,remaining_time:0,manual_run:false};
+let mSched  = {enabled:true, schedule:Array.from({length:7},()=>({is_active:false,hour:7,minute:0,durations:Array(ZONES).fill(10)}))};
+let mInfo   = {ip_address:'10.110.201.40',free_heap:195000,min_free_heap:162000,uptime_sec:5420,ntp_synced:true,current_time:'2026-04-18 07:23:00'};
+let mConfig = {timezone:'UTC0'};
+
+async function GET(p) {
+  if (PREVIEW) {
+    if (p==='/api/status')      return JSON.parse(JSON.stringify(mStat));
+    if (p==='/api/schedule')    return JSON.parse(JSON.stringify(mSched));
+    if (p==='/api/system_info') return JSON.parse(JSON.stringify(mInfo));
+    if (p==='/api/config')      return {timezone: mConfig.timezone};
+  }
+  return (await fetch(p)).json();
+}
+async function POST(p,b) {
+  if (PREVIEW) {
+    if (p==='/api/toggle_schedule') { mSched.enabled=!mSched.enabled; return {enabled:mSched.enabled}; }
+    if (p==='/api/schedule')        { mSched.schedule=b; return {message:'Saved'}; }
+    if (p==='/api/config')          { mConfig.timezone=b.timezone; return {message:'Config saved'}; }
+    if (p==='/api/stop_sequence')   { mStat={is_running:false,day_index:-1,active_sprinkler:-1,remaining_time:0,manual_run:false}; return {message:'Stopped'}; }
+    if (p==='/api/run_day')         { mStat={is_running:true,day_index:b.day,active_sprinkler:0,remaining_time:600,manual_run:true}; return {message:'Started'}; }
+    if (p==='/api/run_zone')        { mStat={is_running:true,day_index:-1,active_sprinkler:b.zone,remaining_time:b.duration*60,manual_run:true}; return {message:'Started'}; }
+    return {message:'OK'};
+  }
+  return (await fetch(p,{method:'POST',headers:{'Content-Type':'application/json'},body:b!==undefined?JSON.stringify(b):undefined})).json();
+}
+
+function toast(msg,type='ok') {
+  const c=document.getElementById('toasts'),t=document.createElement('div');
+  t.className=`toast ${type}`; t.textContent=msg; c.appendChild(t);
+  setTimeout(()=>t.remove(),3100);
+}
+
+// ── Navigation ─────────────────────────────────────────
+function showPage(pg, el) {
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('page-'+pg).classList.add('active');
+  if (el) el.classList.add('active');
+  if (pg==='status')   pollInfo();
+  if (pg==='settings') { renderZoneNameSettings(); loadTz(); pollInfo(); }
+}
+
+// ── Running banner ─────────────────────────────────────
+let runTotal = 0;
+function updateBanner(s) {
+  const banner   = document.getElementById('runBanner');
+  const lbl      = document.getElementById('rb-label');
+  const zone     = document.getElementById('rb-zone');
+  const timer    = document.getElementById('rb-timer');
+  const progWrap = document.getElementById('rb-prog-wrap');
+  const prog     = document.getElementById('rb-prog');
+  const stopBtn  = document.getElementById('rb-stop-btn');
+  const names    = getNames();
+
+  if (s.is_running && s.active_sprinkler >= 0) {
+    const zname = names[s.active_sprinkler] || `Zone ${s.active_sprinkler+1}`;
+    const m = Math.floor(s.remaining_time/60);
+    const sc = s.remaining_time % 60;
+    if (!banner.classList.contains('active')) { runTotal = s.remaining_time; }
+    banner.classList.add('active');
+    lbl.textContent = s.manual_run ? 'Manual Run' : 'Sequence Running';
+    zone.innerHTML = `<span>${zname}</span>`;
+    timer.style.display = 'block';
+    timer.textContent = `${m}m ${String(sc).padStart(2,'0')}s remaining`;
+    progWrap.style.display = 'block';
+    const pct = runTotal > 0 ? Math.max(0, (s.remaining_time / runTotal) * 100) : 0;
+    prog.style.width = pct + '%';
+    stopBtn.style.display = 'block';
+  } else {
+    runTotal = 0;
+    banner.classList.remove('active');
+    lbl.textContent = 'System Status';
+    zone.textContent = 'Idle';
+    timer.style.display = 'none';
+    progWrap.style.display = 'none';
+    stopBtn.style.display = 'none';
+  }
+}
+
+// ── Status poll ────────────────────────────────────────
+let lastStatus = null;
+async function pollStatus() {
+  try {
+    const s = await GET('/api/status');
+    lastStatus = s;
+    const names = getNames();
+
+    // LED + header time
+    document.getElementById('led').className = s.is_running ? 'led running' : 'led';
+
+    // Banner
+    updateBanner(s);
+
+    // Highlight running zone in schedule cards
+    highlightRunningZone(s);
+
+  } catch(e) {
+    document.getElementById('led').className = 'led offline';
+    lastStatus = null;
+  }
+}
+
+function highlightRunningZone(s) {
+  // Clear all highlights
+  document.querySelectorAll('.zone-dur-row').forEach(r=>r.classList.remove('zone-active'));
+  document.querySelectorAll('.sched-card').forEach(c=>c.classList.remove('now-running'));
+  document.querySelectorAll('.running-badge').forEach(b=>b.remove());
+
+  if (!s.is_running || s.active_sprinkler < 0) return;
+
+  // Highlight card for the running day
+  if (s.day_index >= 0) {
+    const card = document.getElementById('sc'+s.day_index);
+    if (card) card.classList.add('now-running');
+  }
+
+  // Highlight the zone row (works for both scheduled and manual within any open card)
+  document.querySelectorAll(`.zdrow-${s.active_sprinkler}`).forEach(row => {
+    row.classList.add('zone-active');
+    // Add running badge if not already there
+    const nameEl = row.querySelector('.zdr-name');
+    if (nameEl && !row.querySelector('.running-badge')) {
+      const badge = document.createElement('span');
+      badge.className = 'running-badge';
+      badge.textContent = '● NOW';
+      nameEl.after(badge);
+    }
+  });
+}
+
+// ── System time (from system_info) ────────────────────
+function updateHeaderTime(timeStr) {
+  // timeStr format: "2026-04-18 07:23:00"
+  if (!timeStr) return;
+  const parts = timeStr.split(' ');
+  if (parts.length === 2) {
+    const [hh, mm] = parts[1].split(':');
+    document.getElementById('hdr-time').textContent = fmt12(parseInt(hh), parseInt(mm));
+  }
+}
+
+// ── System info poll ───────────────────────────────────
+async function pollInfo() {
+  try {
+    const i = await GET('/api/system_info');
+    if (i.current_time) updateHeaderTime(i.current_time);
+    if (document.getElementById('set-ip'))    document.getElementById('set-ip').textContent    = i.ip_address || '—';
+    if (document.getElementById('set-wifi'))  document.getElementById('set-wifi').textContent  = i.ssid       || '—';
+    if (document.getElementById('ss-heap'))   document.getElementById('ss-heap').textContent   = i.free_heap  ? `${Math.round(i.free_heap/1024)}KB`     : '—';
+    if (document.getElementById('ss-minheap'))document.getElementById('ss-minheap').textContent= i.min_free_heap ? `${Math.round(i.min_free_heap/1024)}KB` : '—';
+    if (document.getElementById('ss-ip'))     document.getElementById('ss-ip').textContent     = i.ip_address || '—';
+    if (document.getElementById('ss-ntp'))    document.getElementById('ss-ntp').textContent    = i.ntp_synced ? '✓ Synced' : '✗ No sync';
+    if (document.getElementById('ss-cpu'))    document.getElementById('ss-cpu').textContent    = i.cpu_freq_mhz || '240';
+    if (i.uptime_sec !== undefined) {
+      const u = i.uptime_sec;
+      const h = Math.floor(u/3600), m = Math.floor((u%3600)/60), s = u%60;
+      if (document.getElementById('ss-uptime')) document.getElementById('ss-uptime').textContent = h>0 ? `${h}h ${m}m` : `${m}m ${s}s`;
+      if (document.getElementById('ss-uptime-s')) document.getElementById('ss-uptime-s').textContent = `${u.toLocaleString()} sec total`;
+    }
+    // Schedule master sub
+    const sub = document.getElementById('sched-master-sub');
+    if (sub) sub.textContent = schedEnabled ? 'Running on schedule' : 'Disabled — no auto run';
+  } catch(e){}
+}
+
+// ── Schedule ───────────────────────────────────────────
+let schedData = null, schedEnabled = true;
+
+async function loadSchedule() {
+  try {
+    const d = await GET('/api/schedule');
+    schedData = d.schedule; schedEnabled = d.enabled;
+    renderSchedule();
+    renderSchedTog();
+    if (lastStatus) highlightRunningZone(lastStatus);
+  } catch(e) { toast('Failed to load schedule','err'); }
+}
+
+function renderSchedule() {
+  const list = document.getElementById('schedList');
+  if (!list || !schedData) return;
+  const names = getNames();
+  list.innerHTML = '';
+  schedData.forEach((day, d) => {
+    const timeDisplay = fmt12(day.hour, day.minute);
+    const h12inp      = day.hour % 12 || 12;
+    const ampmInp     = day.hour >= 12 ? 'PM' : 'AM';
+
+    // Zone duration rows
+    let zoneRows = '';
+    for (let z = 0; z < ZONES; z++) {
+      zoneRows += `
+        <div class="zone-dur-row zdrow-${z}" id="zdr_${d}_${z}">
+          <span class="zdr-num">${z+1}</span>
+          <span class="zdr-name">${names[z]}</span>
+          <div class="zdr-inp-wrap">
+            <input class="zdr-inp" type="number" min="0" max="120" value="${day.durations[z]}" id="dur_${d}_${z}">
+            <span class="zdr-unit">min</span>
+          </div>
+        </div>`;
+    }
+
+    const card = document.createElement('div');
+    card.className = `sched-card${day.is_active ? ' on' : ''}`;
+    card.id = `sc${d}`;
+    card.innerHTML = `
+      <div class="sched-card-hdr" onclick="togBody(${d})">
+        <div class="sched-day-name">${DAYS[d]}</div>
+        <div class="sched-time">${timeDisplay}</div>
+        <div class="tog${day.is_active?' on':''}" id="st${d}" onclick="event.stopPropagation();togDay(${d})"></div>
+      </div>
+      <div class="sched-body" id="sb${d}">
+        <div class="time-row">
+          <label>Start</label>
+          <input class="t-inp" type="number" min="1" max="12" value="${h12inp}" id="h_${d}">
+          <span class="sep">:</span>
+          <input class="t-inp" type="number" min="0" max="59" value="${day.minute}" id="m_${d}">
+          <select class="t-inp ampm-sel" id="ap_${d}">
+            <option${ampmInp==='AM'?' selected':''}>AM</option>
+            <option${ampmInp==='PM'?' selected':''}>PM</option>
+          </select>
+        </div>
+        <div class="zones-lbl">Zone Durations (minutes)</div>
+        ${zoneRows}
+        <button class="run-day-btn" onclick="runDayNow(${d})">▶ Run ${DAYS[d]} Now</button>
+      </div>`;
+    list.appendChild(card);
+  });
+}
+
+function togBody(d) { document.getElementById('sb'+d).classList.toggle('open'); }
+function togDay(d) {
+  if (!schedData) return;
+  schedData[d].is_active = !schedData[d].is_active;
+  const t = document.getElementById('st'+d), c = document.getElementById('sc'+d);
+  schedData[d].is_active ? (t.classList.add('on'), c.classList.add('on'))
+                         : (t.classList.remove('on'), c.classList.remove('on'));
+}
+function renderSchedTog() {
+  const el = document.getElementById('schedTog');
+  const sub = document.getElementById('sched-master-sub');
+  schedEnabled ? el.classList.add('on') : el.classList.remove('on');
+  if (sub) sub.textContent = schedEnabled ? 'Running on schedule' : 'Disabled — no auto run';
+}
+async function toggleSched() {
+  const r = await POST('/api/toggle_schedule');
+  if (r.enabled !== undefined) { schedEnabled = r.enabled; renderSchedTog(); toast(`Schedule ${r.enabled?'enabled':'disabled'}`); }
+}
+async function saveSchedule() {
+  if (!schedData) return;
+  const data = schedData.map((_,d) => {
+    const hInp  = document.getElementById(`h_${d}`);
+    const mInp  = document.getElementById(`m_${d}`);
+    const apSel = document.getElementById(`ap_${d}`);
+    const h12   = hInp  ? parseInt(hInp.value)  : (schedData[d].hour % 12 || 12);
+    const mVal  = mInp  ? parseInt(mInp.value)   : schedData[d].minute;
+    const ampm  = apSel ? apSel.value            : (schedData[d].hour >= 12 ? 'PM' : 'AM');
+    const t24   = to24(isNaN(h12) ? (schedData[d].hour%12||12) : h12,
+                       isNaN(mVal) ? schedData[d].minute : mVal, ampm);
+    return {
+      is_active : schedData[d].is_active,
+      hour      : t24.hour,
+      minute    : t24.minute,
+      durations : Array.from({length:ZONES}, (_,z) => {
+        const el = document.getElementById(`dur_${d}_${z}`);
+        const v = el ? parseInt(el.value) : schedData[d].durations[z];
+        return isNaN(v) ? 0 : Math.min(120, Math.max(0, v));
+      })
+    };
+  });
+  const r = await POST('/api/schedule', data);
+  if (r.message) {
+    // Update schedData so card headers reflect the saved values
+    data.forEach((day, d) => {
+      schedData[d].hour     = day.hour;
+      schedData[d].minute   = day.minute;
+      schedData[d].durations = day.durations.slice();
+    });
+    // Refresh card headers without rebuilding the whole list
+    data.forEach((day, d) => {
+      const timeEl = document.querySelector(`#sc${d} .sched-time`);
+      if (timeEl) timeEl.textContent = fmt12(day.hour, day.minute);
+    });
+    toast('Schedule saved ✓');
+  } else {
+    toast(r.error || 'Save failed', 'err');
+  }
+}
+
+// ── Manual ─────────────────────────────────────────────
+function initManualSelect() {
+  const sel = document.getElementById('manualZone');
+  if (!sel) return;
+  sel.innerHTML = getNames().map((n,i) => `<option value="${i}">${n}</option>`).join('');
+}
+async function manualRun() {
+  const z = parseInt(document.getElementById('manualZone').value);
+  const dur = parseInt(document.getElementById('manualDur').value) || 10;
+  const r = await POST('/api/run_zone', {zone:z, duration:dur});
+  r.message ? toast(`${getNames()[z]} · ${dur}min`) : toast(r.error||'Failed','err');
+}
+async function runDaySeq() {
+  const d = parseInt(document.getElementById('manualDay').value);
+  const r = await POST('/api/run_day', {day:d});
+  r.message ? toast(`Running ${DAYS[d]}`) : toast(r.error||'Failed','err');
+}
+async function runDayNow(d) {
+  const r = await POST('/api/run_day', {day:d});
+  r.message ? toast(`Running ${DAYS[d]}`) : toast(r.error||'Failed','err');
+}
+async function stopAll() {
+  const r = await POST('/api/stop_sequence');
+  r.message ? toast('Stopped ■') : toast(r.error||'Failed','err');
+}
+
+// ── Timezone ───────────────────────────────────────────
+async function loadTz() {
+  try {
+    const r = await GET('/api/config');
+    if (r.timezone) {
+      const sel = document.getElementById('tz-select');
+      if (sel) {
+        // Try to match stored value to an option
+        let matched = false;
+        for (const opt of sel.options) {
+          if (opt.value === r.timezone) { sel.value = r.timezone; matched = true; break; }
+        }
+        if (!matched) {
+          // Add a custom option for unrecognised POSIX strings
+          const opt = document.createElement('option');
+          opt.value = r.timezone; opt.textContent = r.timezone;
+          sel.insertBefore(opt, sel.firstChild);
+          sel.value = r.timezone;
+        }
+      }
+    }
+  } catch(e) {}
+}
+async function saveTz() {
+  const sel = document.getElementById('tz-select');
+  if (!sel) return;
+  const r = await POST('/api/config', { timezone: sel.value });
+  r.message ? toast('Timezone saved ✓ — time updates in ~30s') : toast(r.error||'Save failed','err');
+}
+
+// ── Settings ───────────────────────────────────────────
+function renderZoneNameSettings() {
+  const list = document.getElementById('zoneNamesList');
+  if (!list) return;
+  const names = getNames();
+  list.innerHTML = names.map((n,i) => `
+    <div class="settings-row">
+      <span class="settings-label" style="color:#607080">Z${i+1}</span>
+      <input class="zname-inp" value="${n}" id="zn${i}" onchange="updateZname(${i},this.value)">
+    </div>`).join('');
+}
+function updateZname(i, v) {
+  const n = getNames(); n[i] = v.trim() || `Zone ${i+1}`; setNames(n);
+  initManualSelect();
+  renderSchedule(); // refresh zone names in schedule
+  if (lastStatus) highlightRunningZone(lastStatus);
+}
+
+// ── Cloud Updates ──────────────────────────────────────
+async function cloudUpdate(type) {
+  const isfw = type === 'firmware';
+  const btn = document.getElementById(isfw ? 'btn-upd-fw' : 'btn-upd-ui');
+  const row = document.getElementById('upd-status-row');
+  const status = document.getElementById('upd-status');
+
+  if (!confirm(isfw
+    ? 'Download and flash new firmware from GitHub?\nThe board will reboot when done.'
+    : 'Download and apply new UI from GitHub?\nThe page will reload when done.')) return;
+
+  btn.disabled = true;
+  row.style.display = 'flex';
+  status.style.color = '#4fc3f7';
+  status.textContent = isfw ? 'Downloading firmware...' : 'Downloading UI...';
+
+  try {
+    const r = await POST(`/api/update/${type}`);
+    if (isfw) {
+      status.style.color = '#81c784';
+      status.textContent = 'Flashing... board will reboot shortly.';
+      // Wait for reboot then reload
+      setTimeout(() => location.reload(), 15000);
+    } else {
+      status.style.color = '#81c784';
+      status.textContent = `Done — ${r.bytes || ''} bytes. Reloading...`;
+      setTimeout(() => location.reload(), 2000);
+    }
+  } catch(e) {
+    status.style.color = '#ef5350';
+    status.textContent = 'Update failed — check Serial Monitor';
+    btn.disabled = false;
+  }
+}
+
+async function loadFwVersion() {
+  try {
+    const r = await GET('/api/version');
+    const el = document.getElementById('upd-fw-ver');
+    if (el && r.version) el.textContent = 'v' + r.version;
+  } catch(e) {}
+}
+
+// ── Boot ───────────────────────────────────────────────
+loadSchedule();
+initManualSelect();
+pollStatus();
+pollInfo();
+loadFwVersion();
+setInterval(pollStatus, 2000);
+setInterval(pollInfo, 15000);
+</script>
+</body>
+</html>
+
+)====";
