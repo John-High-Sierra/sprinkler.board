@@ -431,6 +431,8 @@ struct RunArgs {
   bool manual;
 };
 
+struct SingleZoneArgs { int zone; int dur; };
+
 void runSequenceTask(void* param) {
   RunArgs* args = (RunArgs*)param;
   int dayIndex  = args->dayIndex;
@@ -497,6 +499,83 @@ void runSequenceTask(void* param) {
   xSemaphoreGive(statusMutex);
 
   Serial.println("[RUN] Sequence complete");
+  vTaskDelete(NULL);
+}
+
+void runSingleZoneTask(void* p) {
+  SingleZoneArgs* a = (SingleZoneArgs*)p;
+  int z   = a->zone;
+  int dur = a->dur;
+  delete a;
+
+  stopRequested = false;
+
+  if (boardConfig.cycleAndSoakEnabled) {
+    int cycleTimeSec   = boardConfig.cycleTime * 60;
+    int totalRemaining = dur * 60;
+
+    while (totalRemaining > 0 && !stopRequested) {
+      int thisRun = min(cycleTimeSec, totalRemaining);
+      Serial.printf("[RUN] C&S zone %d: water %d sec\n", z + 1, thisRun);
+      RELAY_ON(RELAY_PINS[z]);
+
+      int elapsed = 0;
+      while (elapsed < thisRun && !stopRequested) {
+        xSemaphoreTake(statusMutex, portMAX_DELAY);
+        runStatus.isRunning     = true;
+        runStatus.dayIndex      = -1;
+        runStatus.activeZone    = z;
+        runStatus.remainingTime = totalRemaining - elapsed;
+        runStatus.manualRun     = true;
+        xSemaphoreGive(statusMutex);
+        vTaskDelay(pdMS_TO_TICKS(1000));
+        elapsed++;
+      }
+
+      RELAY_OFF(RELAY_PINS[z]);
+      totalRemaining -= elapsed;
+
+      if (totalRemaining > 0 && !stopRequested) {
+        Serial.printf("[RUN] C&S zone %d: soak %d sec, %d sec remaining\n", z + 1, cycleTimeSec, totalRemaining);
+        int soakElapsed = 0;
+        while (soakElapsed < cycleTimeSec && !stopRequested) {
+          xSemaphoreTake(statusMutex, portMAX_DELAY);
+          runStatus.isRunning     = true;
+          runStatus.dayIndex      = -1;
+          runStatus.activeZone    = -1;
+          runStatus.remainingTime = totalRemaining;
+          runStatus.manualRun     = true;
+          xSemaphoreGive(statusMutex);
+          vTaskDelay(pdMS_TO_TICKS(1000));
+          soakElapsed++;
+        }
+      }
+    }
+  } else {
+    RELAY_ON(RELAY_PINS[z]);
+    int remaining = dur * 60;
+    while (remaining > 0 && !stopRequested) {
+      xSemaphoreTake(statusMutex, portMAX_DELAY);
+      runStatus.isRunning     = true;
+      runStatus.dayIndex      = -1;
+      runStatus.activeZone    = z;
+      runStatus.remainingTime = remaining;
+      runStatus.manualRun     = true;
+      xSemaphoreGive(statusMutex);
+      vTaskDelay(pdMS_TO_TICKS(1000));
+      remaining--;
+    }
+    RELAY_OFF(RELAY_PINS[z]);
+  }
+
+  allRelaysOff();
+  xSemaphoreTake(statusMutex, portMAX_DELAY);
+  runStatus.isRunning     = false;
+  runStatus.dayIndex      = -1;
+  runStatus.activeZone    = -1;
+  runStatus.remainingTime = 0;
+  runStatus.manualRun     = false;
+  xSemaphoreGive(statusMutex);
   vTaskDelete(NULL);
 }
 
@@ -752,41 +831,8 @@ void setupRoutes() {
       return;
     }
 
-    struct SingleZoneArgs { int zone; int dur; };
     SingleZoneArgs* args = new SingleZoneArgs{zoneIndex, durationMin};
-
-    xTaskCreate([](void* p) {
-      SingleZoneArgs* a = (SingleZoneArgs*)p;
-      int z = a->zone;
-      int dur = a->dur;
-      delete a;
-
-      stopRequested = false;
-      RELAY_ON(RELAY_PINS[z]);
-      int remaining = dur * 60;
-
-      while (remaining > 0 && !stopRequested) {
-        xSemaphoreTake(statusMutex, portMAX_DELAY);
-        runStatus.isRunning     = true;
-        runStatus.dayIndex      = -1;
-        runStatus.activeZone    = z;
-        runStatus.remainingTime = remaining;
-        runStatus.manualRun     = true;
-        xSemaphoreGive(statusMutex);
-        vTaskDelay(pdMS_TO_TICKS(1000));
-        remaining--;
-      }
-
-      RELAY_OFF(RELAY_PINS[z]);
-      xSemaphoreTake(statusMutex, portMAX_DELAY);
-      runStatus.isRunning     = false;
-      runStatus.dayIndex      = -1;
-      runStatus.activeZone    = -1;
-      runStatus.remainingTime = 0;
-      runStatus.manualRun     = false;
-      xSemaphoreGive(statusMutex);
-      vTaskDelete(NULL);
-    }, "single_zone", 2048, args, 1, NULL);
+    xTaskCreate(runSingleZoneTask, "single_zone", 4096, args, 1, NULL);
 
     server.send(200, "application/json", "{\"message\":\"Zone started\"}");
   });
