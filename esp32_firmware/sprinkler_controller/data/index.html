@@ -368,6 +368,27 @@ select:focus, input[type="number"]:focus { outline: none; border-color: #4fc3f7;
     </div>
   </div>
 
+  <div class="sec-hdr"><span class="sec-title">Cycle &amp; Soak</span></div>
+  <div class="settings-section">
+    <div class="settings-row">
+      <span class="settings-label">Enable Cycle &amp; Soak</span>
+      <label class="toggle"><input type="checkbox" id="cs-enabled-chk"><span class="slider"></span></label>
+    </div>
+    <div class="settings-row">
+      <span class="settings-label">Cycle time</span>
+      <div style="display:flex;align-items:center;gap:6px">
+        <input id="cs-cycle-inp" type="number" min="1" max="30" class="tz-inp" style="width:60px" value="4">
+        <span class="settings-val">min</span>
+      </div>
+    </div>
+    <div class="settings-row" style="font-size:0.85rem;color:#607080;padding-top:0">
+      Splits each zone into short cycles. Multiple zones soak while others water. Single zone alternates water/soak.
+    </div>
+    <div class="settings-row">
+      <button class="save-btn" onclick="saveCycleAndSoak()">Save Cycle &amp; Soak</button>
+    </div>
+  </div>
+
   <div class="sec-hdr"><span class="sec-title">Zone Names</span></div>
   <div class="settings-section" id="zoneNamesList"></div>
 
@@ -559,7 +580,7 @@ function showPage(pg, el) {
   document.getElementById('page-'+pg).classList.add('active');
   if (el) el.classList.add('active');
   if (pg==='status')   pollInfo();
-  if (pg==='settings') { renderZoneNameSettings(); loadTz(); loadWeatherSettings(); pollInfo(); }
+  if (pg==='settings') { renderZoneNameSettings(); loadTz(); loadWeatherSettings(); loadCycleAndSoak(); pollInfo(); }
   if (pg==='weather')  updateWeatherPage();
 }
 
@@ -575,14 +596,18 @@ function updateBanner(s) {
   const stopBtn  = document.getElementById('rb-stop-btn');
   const names    = getNames();
 
-  if (s.is_running && s.active_sprinkler >= 0) {
-    const zname = names[s.active_sprinkler] || `Zone ${s.active_sprinkler+1}`;
+  if (s.is_running) {
     const m = Math.floor(s.remaining_time/60);
     const sc = s.remaining_time % 60;
     if (!banner.classList.contains('active')) { runTotal = s.remaining_time; }
     banner.classList.add('active');
     lbl.textContent = s.manual_run ? 'Manual Run' : 'Sequence Running';
-    zone.innerHTML = `<span>${zname}</span>`;
+    if (s.active_sprinkler === -1) {
+      zone.innerHTML = '<span style="color:#81d4fa">Soaking…</span>';
+    } else {
+      const zname = names[s.active_sprinkler] || `Zone ${s.active_sprinkler+1}`;
+      zone.innerHTML = `<span>${zname}</span>`;
+    }
     timer.style.display = 'block';
     timer.textContent = `${m}m ${String(sc).padStart(2,'0')}s remaining`;
     progWrap.style.display = 'block';
@@ -969,6 +994,23 @@ async function loadWeatherSettings() {
     document.getElementById('weather-skip-chk').checked    = r.weather_enabled  || false;
     document.getElementById('rain-thresh-inp').value        = r.rain_threshold   ?? 50;
     document.getElementById('freeze-thresh-inp').value      = r.freeze_threshold ?? 2;
+  } catch(e) {}
+}
+
+// ── Cycle & Soak settings ──────────────────────────────
+async function saveCycleAndSoak() {
+  const r = await POST('/api/config', {
+    cycle_and_soak_enabled: document.getElementById('cs-enabled-chk').checked,
+    cycle_time: parseInt(document.getElementById('cs-cycle-inp').value)
+  });
+  r.message ? toast('Cycle & Soak saved ✓') : toast(r.error || 'Save failed','err');
+}
+
+async function loadCycleAndSoak() {
+  try {
+    const r = await GET('/api/config');
+    document.getElementById('cs-enabled-chk').checked = r.cycle_and_soak_enabled || false;
+    document.getElementById('cs-cycle-inp').value      = r.cycle_time ?? 4;
   } catch(e) {}
 }
 
