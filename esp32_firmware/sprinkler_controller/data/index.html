@@ -165,6 +165,25 @@ select:focus, input[type="number"]:focus { outline: none; border-color: #4fc3f7;
 <!-- ══ SCHEDULE (default page) ════════════════════════════ -->
 <div class="page active" id="page-schedule">
 
+  <!-- Weather card -->
+  <div id="weather-card" style="display:none;background:#131f2e;border-radius:12px;padding:14px 16px;margin-bottom:14px;border:1px solid #1a3a5c">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <span style="font-size:0.85rem;color:#90caf9;font-weight:600;text-transform:uppercase;letter-spacing:.5px">Weather</span>
+      <span id="wx-age" style="font-size:0.75rem;color:#546e7a"></span>
+    </div>
+    <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center">
+      <div style="display:flex;align-items:center;gap:6px">
+        <span style="font-size:1.6rem" id="wx-icon">🌤</span>
+        <span id="wx-temp" style="font-size:1.4rem;font-weight:700;color:#e0e0e0">--°C</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:4px;font-size:0.85rem">
+        <span>🌧 Today: <strong id="wx-rain-today">--%</strong> &nbsp; Tomorrow: <strong id="wx-rain-tomorrow">--%</strong></span>
+        <span>🌡 Min today: <strong id="wx-min-temp">--°C</strong></span>
+      </div>
+    </div>
+    <div id="wx-skip-warn" style="display:none;margin-top:8px;padding:6px 10px;background:#1a3a5c;border-radius:6px;color:#ffb74d;font-size:0.85rem"></div>
+  </div>
+
   <!-- Running status banner -->
   <div class="run-banner" id="runBanner">
     <div class="rb-label" id="rb-label">System Status</div>
@@ -884,6 +903,46 @@ async function loadWeatherSettings() {
   } catch(e) {}
 }
 
+// ── Weather widget ─────────────────────────────────────
+const WX_ICONS = {
+  0:'☀️', 1:'🌤', 2:'⛅', 3:'☁️',
+  45:'🌫', 48:'🌫',
+  51:'🌦', 53:'🌦', 55:'🌧', 61:'🌧', 63:'🌧', 65:'🌧',
+  71:'🌨', 73:'🌨', 75:'❄️',
+  80:'🌦', 81:'🌧', 82:'⛈',
+  95:'⛈', 96:'⛈', 99:'⛈'
+};
+
+async function updateWeatherWidget() {
+  try {
+    const w = await GET('/api/weather');
+    const card = document.getElementById('weather-card');
+    if (!w.valid) { card.style.display = 'none'; return; }
+    card.style.display = 'block';
+    document.getElementById('wx-icon').textContent          = WX_ICONS[w.weather_code] || '🌡';
+    document.getElementById('wx-temp').textContent          = w.current_temp.toFixed(1) + '°C';
+    document.getElementById('wx-rain-today').textContent    = w.rain_prob_today + '%';
+    document.getElementById('wx-rain-tomorrow').textContent = w.rain_prob_tomorrow + '%';
+    document.getElementById('wx-min-temp').textContent      = w.min_temp_today.toFixed(1) + '°C';
+    const ageMin = Math.round(w.fetched_ago_sec / 60);
+    document.getElementById('wx-age').textContent           = ageMin < 2 ? 'just updated' : `${ageMin}m ago`;
+    const warn = document.getElementById('wx-skip-warn');
+    if (w.weather_enabled) {
+      if (w.rain_prob_today >= w.rain_threshold || w.rain_prob_tomorrow >= w.rain_threshold) {
+        warn.style.display = 'block';
+        warn.textContent = `⚠ Watering will be skipped — rain forecast (${Math.max(w.rain_prob_today, w.rain_prob_tomorrow)}% ≥ ${w.rain_threshold}% threshold)`;
+      } else if (w.min_temp_today <= w.freeze_threshold) {
+        warn.style.display = 'block';
+        warn.textContent = `⚠ Watering will be skipped — freeze risk (min ${w.min_temp_today.toFixed(1)}°C ≤ ${w.freeze_threshold}°C threshold)`;
+      } else {
+        warn.style.display = 'none';
+      }
+    } else {
+      warn.style.display = 'none';
+    }
+  } catch(e) {}
+}
+
 // ── Boot ───────────────────────────────────────────────
 loadSchedule();
 initManualSelect();
@@ -892,6 +951,8 @@ pollInfo();
 loadFwVersion();
 setInterval(pollStatus, 2000);
 setInterval(pollInfo, 15000);
+updateWeatherWidget();
+setInterval(updateWeatherWidget, 300000); // refresh every 5 minutes
 </script>
 </body>
 </html>
