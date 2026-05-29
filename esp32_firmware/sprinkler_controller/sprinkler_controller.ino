@@ -560,6 +560,7 @@ void runSequenceTask(void* param) {
   runStatus.dayIndex      = -1;
   runStatus.activeZone    = -1;
   runStatus.remainingTime = 0;
+  runStatus.manualRun     = false;
   xSemaphoreGive(statusMutex);
 
   Serial.println("[RUN] Sequence complete");
