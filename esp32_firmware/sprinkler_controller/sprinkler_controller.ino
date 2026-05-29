@@ -147,6 +147,18 @@ struct BoardConfig {
 };
 BoardConfig boardConfig;
 
+struct WeatherCache {
+  float currentTemp;      // degrees C
+  float minTempToday;     // degrees C
+  int   rainProbToday;    // percent
+  int   rainProbTomorrow; // percent
+  int   weatherCode;      // WMO code
+  bool  valid;
+  unsigned long fetchedAt; // millis() when last fetched
+};
+WeatherCache weatherCache = {0, 0, 0, 0, 0, false, 0};
+SemaphoreHandle_t weatherMutex;
+
 // ── NTP sync helper ──────────────────────────────────────────
 bool isNtpSynced() {
   return time(nullptr) > 1700000000UL; // valid if past Nov 2023
@@ -317,6 +329,61 @@ void saveConfig() {
   serializeJson(doc, f);
   f.close();
   Serial.printf("[CFG] Config saved\n");
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  WEATHER FETCH (Open-Meteo, no API key required)
+// ═══════════════════════════════════════════════════════════════
+void fetchWeather() {
+  if (boardConfig.latitude == 0.0f && boardConfig.longitude == 0.0f) return;
+
+  char url[256];
+  snprintf(url, sizeof(url),
+    "https://api.open-meteo.com/v1/forecast"
+    "?latitude=%.4f&longitude=%.4f"
+    "&current=temperature_2m,weathercode,precipitation"
+    "&daily=precipitation_probability_max,temperature_2m_min"
+    "&timezone=auto&forecast_days=2",
+    boardConfig.latitude, boardConfig.longitude);
+
+  Serial.printf("[WEATHER] Fetching: %s\n", url);
+
+  WiFiClientSecure client;
+  client.setInsecure();
+  HTTPClient https;
+  if (!https.begin(client, url)) {
+    Serial.println("[WEATHER] Failed to begin HTTPS");
+    return;
+  }
+  int code = https.GET();
+  if (code != 200) {
+    Serial.printf("[WEATHER] HTTP error: %d\n", code);
+    https.end();
+    return;
+  }
+
+  DynamicJsonDocument doc(1024);
+  DeserializationError err = deserializeJson(doc, https.getStream());
+  https.end();
+
+  if (err) {
+    Serial.printf("[WEATHER] JSON parse error: %s\n", err.c_str());
+    return;
+  }
+
+  xSemaphoreTake(weatherMutex, portMAX_DELAY);
+  weatherCache.currentTemp      = doc["current"]["temperature_2m"]                 | 0.0f;
+  weatherCache.weatherCode      = doc["current"]["weathercode"]                    | 0;
+  weatherCache.rainProbToday    = doc["daily"]["precipitation_probability_max"][0] | 0;
+  weatherCache.rainProbTomorrow = doc["daily"]["precipitation_probability_max"][1] | 0;
+  weatherCache.minTempToday     = doc["daily"]["temperature_2m_min"][0]            | 0.0f;
+  weatherCache.valid            = true;
+  weatherCache.fetchedAt        = millis();
+  xSemaphoreGive(weatherMutex);
+
+  Serial.printf("[WEATHER] Temp: %.1f°C  Rain today: %d%%  Rain tomorrow: %d%%  Min: %.1f°C\n",
+    weatherCache.currentTemp, weatherCache.rainProbToday,
+    weatherCache.rainProbTomorrow, weatherCache.minTempToday);
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1141,6 +1208,7 @@ void setup() {
   // Mutexes
   statusMutex   = xSemaphoreCreateMutex();
   scheduleMutex = xSemaphoreCreateMutex();
+  weatherMutex  = xSemaphoreCreateMutex();
 
   // GPIO — LED first so checkWiFiReset() can blink it
   pinMode(STATUS_LED_PIN, OUTPUT);
