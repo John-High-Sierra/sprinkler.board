@@ -116,6 +116,14 @@ select:focus, input[type="number"]:focus { outline: none; border-color: #4fc3f7;
 .upd-btn { width:100%; padding:13px; background:#1a3a5c; color:#4fc3f7; border:2px solid #1a5a8c; border-radius:10px; font-size:1.05rem; font-weight:700; cursor:pointer; font-family:inherit; }
 .upd-btn:active { opacity:0.75; }
 .upd-btn:disabled { opacity:0.4; cursor:not-allowed; }
+.tz-inp { background:#0f2030; border:2px solid #1a4a7a; color:#eee; padding:10px 12px; border-radius:8px; font-size:1.05rem; font-family:inherit; }
+.tz-inp:focus { outline:none; border-color:#4fc3f7; }
+.toggle { position:relative; display:inline-block; width:52px; height:28px; flex-shrink:0; }
+.toggle input { opacity:0; width:0; height:0; }
+.slider { position:absolute; inset:0; background:#2a3a4a; border-radius:14px; cursor:pointer; transition:background 0.25s; }
+.slider::before { content:''; position:absolute; width:24px; height:24px; background:#fff; border-radius:50%; top:2px; left:2px; transition:left 0.25s; box-shadow:0 1px 4px #0006; }
+.toggle input:checked + .slider { background:#2e7d32; }
+.toggle input:checked + .slider::before { left:26px; }
 
 /* ── Sys Status page ──────────────────────────────────── */
 .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
@@ -158,6 +166,25 @@ select:focus, input[type="number"]:focus { outline: none; border-color: #4fc3f7;
 
 <!-- ══ SCHEDULE (default page) ════════════════════════════ -->
 <div class="page active" id="page-schedule">
+
+  <!-- Weather card -->
+  <div id="weather-card" style="display:none;background:#131f2e;border-radius:12px;padding:14px 16px;margin-bottom:14px;border:1px solid #1a3a5c">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <span style="font-size:0.85rem;color:#90caf9;font-weight:600;text-transform:uppercase;letter-spacing:.5px">Weather</span>
+      <span id="wx-age" style="font-size:0.75rem;color:#546e7a"></span>
+    </div>
+    <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center">
+      <div style="display:flex;align-items:center;gap:6px">
+        <span style="font-size:1.6rem" id="wx-icon">🌤</span>
+        <span id="wx-temp" style="font-size:1.4rem;font-weight:700;color:#e0e0e0">--°C</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:4px;font-size:0.85rem">
+        <span>🌧 Today: <strong id="wx-rain-today">--%</strong> &nbsp; Tomorrow: <strong id="wx-rain-tomorrow">--%</strong></span>
+        <span>🌡 Min today: <strong id="wx-min-temp">--°C</strong></span>
+      </div>
+    </div>
+    <div id="wx-skip-warn" style="display:none;margin-top:8px;padding:6px 10px;background:#1a3a5c;border-radius:6px;color:#ffb74d;font-size:0.85rem"></div>
+  </div>
 
   <!-- Running status banner -->
   <div class="run-banner" id="runBanner">
@@ -273,6 +300,49 @@ select:focus, input[type="number"]:focus { outline: none; border-color: #4fc3f7;
         </optgroup>
       </select>
       <button class="btn-full btn-blue" style="width:100%;margin:0" onclick="saveTz()">Save Timezone</button>
+    </div>
+  </div>
+
+  <div class="sec-hdr"><span class="sec-title">Location</span></div>
+  <div class="settings-section">
+    <div class="settings-row" style="gap:8px;flex-wrap:wrap">
+      <button class="upd-btn" style="flex:1;min-width:120px" onclick="autoLocate()">Use My Location</button>
+      <input id="zip-inp" type="text" class="tz-inp" placeholder="ZIP / Postcode" style="flex:1;min-width:100px">
+      <button class="upd-btn" onclick="lookupZip()" style="white-space:nowrap">Look Up</button>
+    </div>
+    <div class="settings-row" style="gap:8px">
+      <span class="settings-label" style="min-width:30px">Lat</span>
+      <input id="lat-inp" type="number" step="0.0001" class="tz-inp" style="flex:1" placeholder="0.0000">
+      <span class="settings-label" style="min-width:30px">Lon</span>
+      <input id="lon-inp" type="number" step="0.0001" class="tz-inp" style="flex:1" placeholder="0.0000">
+    </div>
+    <div class="settings-row">
+      <button class="save-btn" onclick="saveLocation()">Save Location</button>
+    </div>
+  </div>
+
+  <div class="sec-hdr"><span class="sec-title">Weather Skip</span></div>
+  <div class="settings-section">
+    <div class="settings-row">
+      <span class="settings-label">Enable weather skip</span>
+      <label class="toggle"><input type="checkbox" id="weather-skip-chk" onchange="saveWeatherSettings()"><span class="slider"></span></label>
+    </div>
+    <div class="settings-row">
+      <span class="settings-label">Skip if rain forecast &gt;</span>
+      <div style="display:flex;align-items:center;gap:6px">
+        <input id="rain-thresh-inp" type="number" min="0" max="100" class="tz-inp" style="width:60px" value="50">
+        <span class="settings-val">%</span>
+      </div>
+    </div>
+    <div class="settings-row">
+      <span class="settings-label">Skip if temp below</span>
+      <div style="display:flex;align-items:center;gap:6px">
+        <input id="freeze-thresh-inp" type="number" step="0.5" class="tz-inp" style="width:60px" value="2">
+        <span class="settings-val">°C</span>
+      </div>
+    </div>
+    <div class="settings-row">
+      <button class="save-btn" onclick="saveWeatherSettings()">Save Weather Settings</button>
     </div>
   </div>
 
@@ -423,7 +493,7 @@ function showPage(pg, el) {
   document.getElementById('page-'+pg).classList.add('active');
   if (el) el.classList.add('active');
   if (pg==='status')   pollInfo();
-  if (pg==='settings') { renderZoneNameSettings(); loadTz(); pollInfo(); }
+  if (pg==='settings') { renderZoneNameSettings(); loadTz(); loadWeatherSettings(); pollInfo(); }
 }
 
 // ── Running banner ─────────────────────────────────────
@@ -780,6 +850,101 @@ async function loadFwVersion() {
   } catch(e) {}
 }
 
+// ── Location & Weather Settings ────────────────────────
+async function autoLocate() {
+  if (!navigator.geolocation) { toast('Geolocation not supported','err'); return; }
+  navigator.geolocation.getCurrentPosition(
+    pos => {
+      document.getElementById('lat-inp').value = pos.coords.latitude.toFixed(4);
+      document.getElementById('lon-inp').value = pos.coords.longitude.toFixed(4);
+      toast('Location found — click Save Location');
+    },
+    () => toast('Location access denied','err')
+  );
+}
+
+async function lookupZip() {
+  const zip = document.getElementById('zip-inp').value.trim();
+  if (!zip) { toast('Enter a ZIP or postcode first','err'); return; }
+  try {
+    const r = await fetch(`https://nominatim.openstreetmap.org/search?postalcode=${encodeURIComponent(zip)}&format=json&limit=1`,
+      { headers: { 'Accept-Language': 'en' } });
+    const data = await r.json();
+    if (!data.length) { toast('ZIP not found','err'); return; }
+    document.getElementById('lat-inp').value = parseFloat(data[0].lat).toFixed(4);
+    document.getElementById('lon-inp').value = parseFloat(data[0].lon).toFixed(4);
+    toast(`Found: ${data[0].display_name.split(',').slice(-2).join(',').trim()} — click Save Location`);
+  } catch(e) { toast('Lookup failed','err'); }
+}
+
+async function saveLocation() {
+  const lat = parseFloat(document.getElementById('lat-inp').value);
+  const lon = parseFloat(document.getElementById('lon-inp').value);
+  if (isNaN(lat) || isNaN(lon)) { toast('Invalid coordinates','err'); return; }
+  const r = await POST('/api/config', { latitude: lat, longitude: lon });
+  r.message ? toast('Location saved ✓') : toast(r.error || 'Save failed','err');
+}
+
+async function saveWeatherSettings() {
+  const r = await POST('/api/config', {
+    weather_enabled:  document.getElementById('weather-skip-chk').checked,
+    rain_threshold:   parseInt(document.getElementById('rain-thresh-inp').value),
+    freeze_threshold: parseFloat(document.getElementById('freeze-thresh-inp').value)
+  });
+  r.message ? toast('Weather settings saved ✓') : toast(r.error || 'Save failed','err');
+}
+
+async function loadWeatherSettings() {
+  try {
+    const r = await GET('/api/config');
+    if (r.latitude  !== undefined) document.getElementById('lat-inp').value = r.latitude;
+    if (r.longitude !== undefined) document.getElementById('lon-inp').value = r.longitude;
+    document.getElementById('weather-skip-chk').checked    = r.weather_enabled  || false;
+    document.getElementById('rain-thresh-inp').value        = r.rain_threshold   ?? 50;
+    document.getElementById('freeze-thresh-inp').value      = r.freeze_threshold ?? 2;
+  } catch(e) {}
+}
+
+// ── Weather widget ─────────────────────────────────────
+const WX_ICONS = {
+  0:'☀️', 1:'🌤', 2:'⛅', 3:'☁️',
+  45:'🌫', 48:'🌫',
+  51:'🌦', 53:'🌦', 55:'🌧', 61:'🌧', 63:'🌧', 65:'🌧',
+  71:'🌨', 73:'🌨', 75:'❄️',
+  80:'🌦', 81:'🌧', 82:'⛈',
+  95:'⛈', 96:'⛈', 99:'⛈'
+};
+
+async function updateWeatherWidget() {
+  try {
+    const w = await GET('/api/weather');
+    const card = document.getElementById('weather-card');
+    if (!w.valid) { card.style.display = 'none'; return; }
+    card.style.display = 'block';
+    document.getElementById('wx-icon').textContent          = WX_ICONS[w.weather_code] || '🌡';
+    document.getElementById('wx-temp').textContent          = w.current_temp.toFixed(1) + '°C';
+    document.getElementById('wx-rain-today').textContent    = w.rain_prob_today + '%';
+    document.getElementById('wx-rain-tomorrow').textContent = w.rain_prob_tomorrow + '%';
+    document.getElementById('wx-min-temp').textContent      = w.min_temp_today.toFixed(1) + '°C';
+    const ageMin = Math.round(w.fetched_ago_sec / 60);
+    document.getElementById('wx-age').textContent           = ageMin < 2 ? 'just updated' : `${ageMin}m ago`;
+    const warn = document.getElementById('wx-skip-warn');
+    if (w.weather_enabled) {
+      if (w.rain_prob_today >= w.rain_threshold || w.rain_prob_tomorrow >= w.rain_threshold) {
+        warn.style.display = 'block';
+        warn.textContent = `⚠ Watering will be skipped — rain forecast (${Math.max(w.rain_prob_today, w.rain_prob_tomorrow)}% ≥ ${w.rain_threshold}% threshold)`;
+      } else if (w.min_temp_today <= w.freeze_threshold) {
+        warn.style.display = 'block';
+        warn.textContent = `⚠ Watering will be skipped — freeze risk (min ${w.min_temp_today.toFixed(1)}°C ≤ ${w.freeze_threshold}°C threshold)`;
+      } else {
+        warn.style.display = 'none';
+      }
+    } else {
+      warn.style.display = 'none';
+    }
+  } catch(e) {}
+}
+
 // ── Boot ───────────────────────────────────────────────
 loadSchedule();
 initManualSelect();
@@ -788,6 +953,8 @@ pollInfo();
 loadFwVersion();
 setInterval(pollStatus, 2000);
 setInterval(pollInfo, 15000);
+updateWeatherWidget();
+setInterval(updateWeatherWidget, 300000); // refresh every 5 minutes
 </script>
 </body>
 </html>
