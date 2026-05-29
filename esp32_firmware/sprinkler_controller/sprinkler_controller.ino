@@ -386,6 +386,26 @@ void fetchWeather() {
     weatherCache.rainProbTomorrow, weatherCache.minTempToday);
 }
 
+// Returns a skip reason string, or nullptr if no skip needed
+const char* shouldSkipForWeather() {
+  if (!boardConfig.weatherEnabled) return nullptr;
+
+  xSemaphoreTake(weatherMutex, portMAX_DELAY);
+  bool  valid         = weatherCache.valid;
+  int   rainToday     = weatherCache.rainProbToday;
+  int   rainTomorrow  = weatherCache.rainProbTomorrow;
+  float minTemp       = weatherCache.minTempToday;
+  xSemaphoreGive(weatherMutex);
+
+  if (!valid) return nullptr; // no data — don't skip
+
+  if (rainToday >= boardConfig.rainThreshold || rainTomorrow >= boardConfig.rainThreshold)
+    return "rain forecast";
+  if (minTemp <= boardConfig.freezeThreshold)
+    return "freeze risk";
+  return nullptr;
+}
+
 void weatherTask(void* param) {
   vTaskDelay(pdMS_TO_TICKS(5000)); // wait 5s for WiFi/NTP to settle
   fetchWeather();
@@ -518,13 +538,24 @@ void scheduleCheckerTask(void* param) {
     xSemaphoreGive(scheduleMutex);
 
     if (day.isActive && day.hour == hour && day.minute == minute) {
-      Serial.printf("[SCHED] Scheduled run: %s %02d:%02d\n",
-        (const char*[]){"Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"}[dayIndex],
-        hour, minute);
-
       lastScheduledDay    = dayIndex;
       lastScheduledMinute = minute;
-      startSequence(dayIndex, false);
+
+      const char* skipReason = shouldSkipForWeather();
+      if (skipReason) {
+        xSemaphoreTake(weatherMutex, portMAX_DELAY);
+        int   rainToday    = weatherCache.rainProbToday;
+        int   rainTomorrow = weatherCache.rainProbTomorrow;
+        float minTemp      = weatherCache.minTempToday;
+        xSemaphoreGive(weatherMutex);
+        Serial.printf("[SCHED] Run SKIPPED — %s (rain today: %d%%, rain tomorrow: %d%%, min: %.1f°C)\n",
+          skipReason, rainToday, rainTomorrow, minTemp);
+      } else {
+        Serial.printf("[SCHED] Scheduled run: %s %02d:%02d\n",
+          (const char*[]){"Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"}[dayIndex],
+          hour, minute);
+        startSequence(dayIndex, false);
+      }
     }
   }
 }
