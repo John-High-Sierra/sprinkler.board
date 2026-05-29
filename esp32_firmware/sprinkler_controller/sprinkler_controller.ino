@@ -370,9 +370,11 @@ void fetchWeather() {
     return;
   }
 
-  DynamicJsonDocument doc(2048);
-  DeserializationError err = deserializeJson(doc, https.getStream());
+  String body = https.getString();
   https.end();
+
+  DynamicJsonDocument doc(2048);
+  DeserializationError err = deserializeJson(doc, body);
 
   if (err) {
     Serial.printf("[WEATHER] JSON parse error: %s\n", err.c_str());
