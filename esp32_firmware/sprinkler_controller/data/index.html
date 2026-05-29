@@ -137,11 +137,35 @@ select:focus, input[type="number"]:focus { outline: none; border-color: #4fc3f7;
 
 /* ── Bottom nav ───────────────────────────────────────── */
 .bottom-nav { position: fixed; bottom: 0; left: 0; right: 0; background: #131f2e; border-top: 2px solid #1a3a5c; display: flex; z-index: 200; }
-.nav-btn { flex: 1; padding: 10px 4px 14px; text-align: center; cursor: pointer; border: none; background: none; color: #607080; transition: color 0.2s; font-family: inherit; }
+.nav-btn { flex: 1; padding: 10px 2px 14px; text-align: center; cursor: pointer; border: none; background: none; color: #607080; transition: color 0.2s; font-family: inherit; }
 .nav-btn.active { color: #4fc3f7; }
 .nav-btn:active { opacity: 0.7; }
-.nav-icon { font-size: 1.6rem; display: block; margin-bottom: 2px; }
-.nav-label { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; }
+.nav-icon { font-size: 1.4rem; display: block; margin-bottom: 2px; }
+.nav-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; }
+
+/* ── Weather page ─────────────────────────────────────── */
+.wx-hero { background: #131f2e; border: 2px solid #1a3a5c; border-radius: 16px; padding: 24px 20px; text-align: center; margin-bottom: 14px; }
+.wx-hero-icon { font-size: 4rem; margin-bottom: 8px; }
+.wx-hero-temp { font-size: 3rem; font-weight: 700; color: #e0e0e0; margin-bottom: 4px; }
+.wx-hero-desc { font-size: 1.1rem; color: #90caf9; }
+.wx-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
+.wx-card { background: #131f2e; border: 2px solid #1a3a5c; border-radius: 14px; padding: 16px; }
+.wx-card-label { font-size: 0.8rem; color: #607080; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; margin-bottom: 6px; }
+.wx-card-val { font-size: 1.5rem; font-weight: 700; color: #4fc3f7; }
+.wx-card-sub { font-size: 0.85rem; color: #607080; margin-top: 4px; }
+.wx-card.warn { border-color: #e65100; }
+.wx-card.warn .wx-card-val { color: #ffb74d; }
+.wx-card.freeze { border-color: #1565c0; }
+.wx-card.freeze .wx-card-val { color: #81d4fa; }
+.wx-skip-box { border-radius: 12px; padding: 16px; margin-bottom: 14px; border: 2px solid #1a3a5c; background: #131f2e; }
+.wx-skip-box.skipping { border-color: #e65100; background: #1a0e00; }
+.wx-skip-box.active { border-color: #2e7d32; background: #0d1f0f; }
+.wx-skip-label { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 1px; font-weight: 700; margin-bottom: 4px; }
+.wx-skip-reason { font-size: 1rem; color: #e0e0e0; }
+.wx-footer { text-align: center; font-size: 0.85rem; color: #546e7a; margin-bottom: 10px; }
+.wx-no-data { text-align: center; padding: 48px 20px; color: #607080; }
+.wx-no-data-icon { font-size: 3rem; margin-bottom: 12px; }
+.wx-no-data p { font-size: 1rem; line-height: 1.6; }
 
 /* ── Toast ────────────────────────────────────────────── */
 #toasts { position: fixed; bottom: 80px; right: 12px; display: flex; flex-direction: column; gap: 7px; z-index: 999; pointer-events: none; }
@@ -406,6 +430,47 @@ select:focus, input[type="number"]:focus { outline: none; border-color: #4fc3f7;
   </div>
 </div>
 
+<!-- ══ WEATHER PAGE ════════════════════════════════════════ -->
+<div class="page" id="page-weather">
+  <div id="wx-page-nodata" class="wx-no-data" style="display:none">
+    <div class="wx-no-data-icon">🌐</div>
+    <p>No weather data yet.<br>Set your location in Settings<br>and wait a few seconds.</p>
+  </div>
+  <div id="wx-page-content" style="display:none">
+    <div class="wx-hero">
+      <div class="wx-hero-icon" id="wxp-icon">🌤</div>
+      <div class="wx-hero-temp" id="wxp-temp">--°C</div>
+      <div class="wx-hero-desc" id="wxp-desc">--</div>
+    </div>
+    <div class="wx-grid">
+      <div class="wx-card" id="wxp-rain-today-card">
+        <div class="wx-card-label">Rain Today</div>
+        <div class="wx-card-val" id="wxp-rain-today">--%</div>
+        <div class="wx-card-sub">probability</div>
+      </div>
+      <div class="wx-card" id="wxp-rain-tomorrow-card">
+        <div class="wx-card-label">Rain Tomorrow</div>
+        <div class="wx-card-val" id="wxp-rain-tomorrow">--%</div>
+        <div class="wx-card-sub">probability</div>
+      </div>
+      <div class="wx-card" id="wxp-min-card">
+        <div class="wx-card-label">Min Temp Today</div>
+        <div class="wx-card-val" id="wxp-min-temp">--°C</div>
+        <div class="wx-card-sub" id="wxp-freeze-sub">overnight low</div>
+      </div>
+      <div class="wx-card">
+        <div class="wx-card-label">Updated</div>
+        <div class="wx-card-val" style="font-size:1.1rem" id="wxp-age">--</div>
+        <div class="wx-card-sub"><button onclick="refreshWeatherPage()" style="background:none;border:none;color:#4fc3f7;cursor:pointer;font-size:0.85rem;padding:0;font-family:inherit">↻ Refresh</button></div>
+      </div>
+    </div>
+    <div class="wx-skip-box" id="wxp-skip-box">
+      <div class="wx-skip-label" id="wxp-skip-label">Weather Skip</div>
+      <div class="wx-skip-reason" id="wxp-skip-reason">--</div>
+    </div>
+  </div>
+</div>
+
 <nav class="bottom-nav">
   <button class="nav-btn active" onclick="showPage('schedule',this)">
     <span class="nav-icon">📅</span><span class="nav-label">Schedule</span>
@@ -413,11 +478,14 @@ select:focus, input[type="number"]:focus { outline: none; border-color: #4fc3f7;
   <button class="nav-btn" onclick="showPage('manual',this)">
     <span class="nav-icon">▶️</span><span class="nav-label">Manual</span>
   </button>
+  <button class="nav-btn" onclick="showPage('weather',this)">
+    <span class="nav-icon">🌤</span><span class="nav-label">Weather</span>
+  </button>
   <button class="nav-btn" onclick="showPage('settings',this)">
     <span class="nav-icon">⚙️</span><span class="nav-label">Settings</span>
   </button>
   <button class="nav-btn" onclick="showPage('status',this)">
-    <span class="nav-icon">📊</span><span class="nav-label">Sys Status</span>
+    <span class="nav-icon">📊</span><span class="nav-label">Status</span>
   </button>
 </nav>
 
@@ -492,6 +560,7 @@ function showPage(pg, el) {
   if (el) el.classList.add('active');
   if (pg==='status')   pollInfo();
   if (pg==='settings') { renderZoneNameSettings(); loadTz(); loadWeatherSettings(); pollInfo(); }
+  if (pg==='weather')  updateWeatherPage();
 }
 
 // ── Running banner ─────────────────────────────────────
@@ -903,7 +972,7 @@ async function loadWeatherSettings() {
   } catch(e) {}
 }
 
-// ── Weather widget ─────────────────────────────────────
+// ── Weather widget + page ──────────────────────────────
 const WX_ICONS = {
   0:'☀️', 1:'🌤', 2:'⛅', 3:'☁️',
   45:'🌫', 48:'🌫',
@@ -942,6 +1011,74 @@ async function updateWeatherWidget() {
     }
   } catch(e) {}
 }
+
+const WX_DESCS = {
+  0:'Clear sky', 1:'Mainly clear', 2:'Partly cloudy', 3:'Overcast',
+  45:'Fog', 48:'Icy fog',
+  51:'Light drizzle', 53:'Drizzle', 55:'Heavy drizzle',
+  61:'Light rain', 63:'Rain', 65:'Heavy rain',
+  71:'Light snow', 73:'Snow', 75:'Heavy snow',
+  80:'Rain showers', 81:'Heavy showers', 82:'Violent showers',
+  95:'Thunderstorm', 96:'Thunderstorm + hail', 99:'Heavy thunderstorm'
+};
+
+async function updateWeatherPage() {
+  try {
+    const w = await GET('/api/weather');
+    const nodata  = document.getElementById('wx-page-nodata');
+    const content = document.getElementById('wx-page-content');
+    if (!w.valid) { nodata.style.display='block'; content.style.display='none'; return; }
+    nodata.style.display = 'none'; content.style.display = 'block';
+
+    document.getElementById('wxp-icon').textContent = WX_ICONS[w.weather_code] || '🌡';
+    document.getElementById('wxp-temp').textContent = w.current_temp.toFixed(1) + '°C';
+    document.getElementById('wxp-desc').textContent = WX_DESCS[w.weather_code] || 'Unknown';
+
+    // Rain cards — highlight if above threshold
+    document.getElementById('wxp-rain-today').textContent    = w.rain_prob_today + '%';
+    document.getElementById('wxp-rain-tomorrow').textContent = w.rain_prob_tomorrow + '%';
+    document.getElementById('wxp-rain-today-card').className    = 'wx-card' + (w.weather_enabled && w.rain_prob_today    >= w.rain_threshold ? ' warn' : '');
+    document.getElementById('wxp-rain-tomorrow-card').className = 'wx-card' + (w.weather_enabled && w.rain_prob_tomorrow >= w.rain_threshold ? ' warn' : '');
+
+    // Min temp card — highlight if freeze risk
+    const freezeRisk = w.weather_enabled && w.min_temp_today <= w.freeze_threshold;
+    document.getElementById('wxp-min-temp').textContent = w.min_temp_today.toFixed(1) + '°C';
+    document.getElementById('wxp-min-card').className   = 'wx-card' + (freezeRisk ? ' freeze' : '');
+    document.getElementById('wxp-freeze-sub').textContent = freezeRisk ? '❄ Freeze risk!' : 'overnight low';
+
+    // Age
+    const ageMin = Math.round(w.fetched_ago_sec / 60);
+    document.getElementById('wxp-age').textContent = ageMin < 2 ? 'Just now' : `${ageMin}m ago`;
+
+    // Skip status box
+    const box    = document.getElementById('wxp-skip-box');
+    const lbl    = document.getElementById('wxp-skip-label');
+    const reason = document.getElementById('wxp-skip-reason');
+    if (!w.weather_enabled) {
+      box.className = 'wx-skip-box';
+      lbl.style.color = '#607080';
+      lbl.textContent = 'Weather Skip — Disabled';
+      reason.textContent = 'Enable in Settings to skip watering on rain or freeze days.';
+    } else if (w.rain_prob_today >= w.rain_threshold || w.rain_prob_tomorrow >= w.rain_threshold) {
+      box.className = 'wx-skip-box skipping';
+      lbl.style.color = '#ffb74d';
+      lbl.textContent = '⚠ Watering Will Be Skipped';
+      reason.textContent = `Rain forecast: ${Math.max(w.rain_prob_today, w.rain_prob_tomorrow)}% ≥ ${w.rain_threshold}% threshold`;
+    } else if (freezeRisk) {
+      box.className = 'wx-skip-box skipping';
+      lbl.style.color = '#81d4fa';
+      lbl.textContent = '❄ Watering Will Be Skipped';
+      reason.textContent = `Freeze risk: min ${w.min_temp_today.toFixed(1)}°C ≤ ${w.freeze_threshold}°C threshold`;
+    } else {
+      box.className = 'wx-skip-box active';
+      lbl.style.color = '#81c784';
+      lbl.textContent = '✓ Watering Will Run';
+      reason.textContent = `No rain or freeze risk detected. Next scheduled run will proceed.`;
+    }
+  } catch(e) {}
+}
+
+function refreshWeatherPage() { updateWeatherPage(); updateWeatherWidget(); }
 
 // ── Boot ───────────────────────────────────────────────
 loadSchedule();
