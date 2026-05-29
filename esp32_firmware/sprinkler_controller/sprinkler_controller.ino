@@ -33,7 +33,7 @@
  * Improv WiFi Serial is implemented inline — no external library required.
  *
  * Board: "ESP32 Dev Module" in Arduino IDE
- * Partition Scheme: "Default 4MB with spiffs"
+ * Partition Scheme: "Minimal SPIFFS (1.9MB APP with OTA/190KB SPIFFS)"
  * Upload Speed: 921600
  */
 
