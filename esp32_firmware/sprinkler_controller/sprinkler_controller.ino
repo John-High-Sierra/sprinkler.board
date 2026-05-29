@@ -144,6 +144,8 @@ struct BoardConfig {
   bool weatherEnabled;
   int  rainThreshold;    // percent 0-100, skip if forecast >= this
   float freezeThreshold; // degrees C, skip if min temp <= this
+  bool cycleAndSoakEnabled;
+  int  cycleTime;            // minutes per cycle, default 4
 };
 BoardConfig boardConfig;
 
@@ -288,11 +290,13 @@ bool saveSchedule() {
 // ═══════════════════════════════════════════════════════════════
 void loadConfig() {
   strlcpy(boardConfig.timezone, DEFAULT_TZ, sizeof(boardConfig.timezone));
-  boardConfig.latitude       = 0.0f;
-  boardConfig.longitude      = 0.0f;
-  boardConfig.weatherEnabled = false;
-  boardConfig.rainThreshold  = 50;
-  boardConfig.freezeThreshold = 2.0f;
+  boardConfig.latitude            = 0.0f;
+  boardConfig.longitude           = 0.0f;
+  boardConfig.weatherEnabled      = false;
+  boardConfig.rainThreshold       = 50;
+  boardConfig.freezeThreshold     = 2.0f;
+  boardConfig.cycleAndSoakEnabled = false;
+  boardConfig.cycleTime           = 4;
 
   if (!LittleFS.exists(CONFIG_FILE)) return;
   File f = LittleFS.open(CONFIG_FILE, "r");
@@ -306,11 +310,13 @@ void loadConfig() {
   }
   const char* tz = doc["timezone"];
   if (tz) strlcpy(boardConfig.timezone, tz, sizeof(boardConfig.timezone));
-  boardConfig.latitude        = doc["latitude"]        | 0.0f;
-  boardConfig.longitude       = doc["longitude"]       | 0.0f;
-  boardConfig.weatherEnabled  = doc["weather_enabled"] | false;
-  boardConfig.rainThreshold   = doc["rain_threshold"]  | 50;
-  boardConfig.freezeThreshold = doc["freeze_threshold"]| 2.0f;
+  boardConfig.latitude            = doc["latitude"]              | 0.0f;
+  boardConfig.longitude           = doc["longitude"]             | 0.0f;
+  boardConfig.weatherEnabled      = doc["weather_enabled"]       | false;
+  boardConfig.rainThreshold       = doc["rain_threshold"]        | 50;
+  boardConfig.freezeThreshold     = doc["freeze_threshold"]      | 2.0f;
+  boardConfig.cycleAndSoakEnabled = doc["cycle_and_soak_enabled"]| false;
+  boardConfig.cycleTime           = doc["cycle_time"]            | 4;
   Serial.printf("[CFG] Timezone: %s  Lat: %.4f  Lon: %.4f  WeatherSkip: %s\n",
     boardConfig.timezone, boardConfig.latitude, boardConfig.longitude,
     boardConfig.weatherEnabled ? "ON" : "OFF");
@@ -318,12 +324,14 @@ void loadConfig() {
 
 void saveConfig() {
   DynamicJsonDocument doc(512);
-  doc["timezone"]         = boardConfig.timezone;
-  doc["latitude"]         = boardConfig.latitude;
-  doc["longitude"]        = boardConfig.longitude;
-  doc["weather_enabled"]  = boardConfig.weatherEnabled;
-  doc["rain_threshold"]   = boardConfig.rainThreshold;
-  doc["freeze_threshold"] = boardConfig.freezeThreshold;
+  doc["timezone"]             = boardConfig.timezone;
+  doc["latitude"]             = boardConfig.latitude;
+  doc["longitude"]            = boardConfig.longitude;
+  doc["weather_enabled"]      = boardConfig.weatherEnabled;
+  doc["rain_threshold"]       = boardConfig.rainThreshold;
+  doc["freeze_threshold"]     = boardConfig.freezeThreshold;
+  doc["cycle_and_soak_enabled"] = boardConfig.cycleAndSoakEnabled;
+  doc["cycle_time"]             = boardConfig.cycleTime;
   File f = LittleFS.open(CONFIG_FILE, "w");
   if (!f) return;
   serializeJson(doc, f);
@@ -822,13 +830,15 @@ void setupRoutes() {
 
   // ── GET /api/config ───────────────────────────────────────────
   server.on("/api/config", HTTP_GET, []() {
-    DynamicJsonDocument doc(512);
-    doc["timezone"]         = boardConfig.timezone;
-    doc["latitude"]         = boardConfig.latitude;
-    doc["longitude"]        = boardConfig.longitude;
-    doc["weather_enabled"]  = boardConfig.weatherEnabled;
-    doc["rain_threshold"]   = boardConfig.rainThreshold;
-    doc["freeze_threshold"] = boardConfig.freezeThreshold;
+    DynamicJsonDocument doc(768);
+    doc["timezone"]               = boardConfig.timezone;
+    doc["latitude"]               = boardConfig.latitude;
+    doc["longitude"]              = boardConfig.longitude;
+    doc["weather_enabled"]        = boardConfig.weatherEnabled;
+    doc["rain_threshold"]         = boardConfig.rainThreshold;
+    doc["freeze_threshold"]       = boardConfig.freezeThreshold;
+    doc["cycle_and_soak_enabled"] = boardConfig.cycleAndSoakEnabled;
+    doc["cycle_time"]             = boardConfig.cycleTime;
     String out; serializeJson(doc, out);
     server.send(200, "application/json", out);
   });
@@ -848,11 +858,13 @@ void setupRoutes() {
       strlcpy(boardConfig.timezone, tz, sizeof(boardConfig.timezone));
       applyTimezone();
     }
-    if (doc.containsKey("latitude"))         boardConfig.latitude        = doc["latitude"].as<float>();
-    if (doc.containsKey("longitude"))        boardConfig.longitude       = doc["longitude"].as<float>();
-    if (doc.containsKey("weather_enabled"))  boardConfig.weatherEnabled  = doc["weather_enabled"].as<bool>();
-    if (doc.containsKey("rain_threshold"))   boardConfig.rainThreshold   = doc["rain_threshold"].as<int>();
-    if (doc.containsKey("freeze_threshold")) boardConfig.freezeThreshold = doc["freeze_threshold"].as<float>();
+    if (doc.containsKey("latitude"))              boardConfig.latitude            = doc["latitude"].as<float>();
+    if (doc.containsKey("longitude"))             boardConfig.longitude           = doc["longitude"].as<float>();
+    if (doc.containsKey("weather_enabled"))       boardConfig.weatherEnabled      = doc["weather_enabled"].as<bool>();
+    if (doc.containsKey("rain_threshold"))        boardConfig.rainThreshold       = doc["rain_threshold"].as<int>();
+    if (doc.containsKey("freeze_threshold"))      boardConfig.freezeThreshold     = doc["freeze_threshold"].as<float>();
+    if (doc.containsKey("cycle_and_soak_enabled")) boardConfig.cycleAndSoakEnabled = doc["cycle_and_soak_enabled"].as<bool>();
+    if (doc.containsKey("cycle_time"))            boardConfig.cycleTime           = doc["cycle_time"].as<int>();
     saveConfig();
     server.send(200, "application/json", "{\"message\":\"Config saved\"}");
   });
