@@ -86,7 +86,6 @@ const int RELAY_PINS[8] = {32, 33, 25, 26, 27, 14, 12, 13};
 #define FW_VERSION     "1.4.1"  // HTML embedded in firmware — single upload, no LittleFS needed
 
 // Cloud update URLs — point these at your GitHub repo
-#define CLOUD_UI_URL  "https://raw.githubusercontent.com/John-High-Sierra/sprinkler.board/main/esp32_firmware/sprinkler_controller/data/index.html"
 #define CLOUD_FW_URL  "https://github.com/John-High-Sierra/sprinkler.board/releases/latest/download/sprinkler_controller.bin"
 #define CONFIG_FILE    "/config.json"
 #define DEFAULT_TZ     "UTC0"   // Overridden by config.json saved via Settings page
@@ -794,57 +793,6 @@ void setupCloudUpdateRoutes() {
   server.on("/api/version", HTTP_GET, []() {
     String resp = "{\"version\":\"" + String(FW_VERSION) + "\"}";
     server.send(200, "application/json", resp);
-  });
-
-  // ── POST /api/update/ui — pull new index.html from GitHub ────
-  server.on("/api/update/ui", HTTP_POST, []() {
-    Serial.printf("[CLOUD] Downloading UI from: %s\n", CLOUD_UI_URL);
-
-    WiFiClientSecure client;
-    client.setInsecure(); // Skip cert validation — acceptable for home device
-
-    HTTPClient https;
-    if (!https.begin(client, CLOUD_UI_URL)) {
-      server.send(500, "application/json", "{\"error\":\"Failed to connect to URL\"}");
-      return;
-    }
-
-    int code = https.GET();
-    Serial.printf("[CLOUD] HTTP response: %d\n", code);
-
-    if (code != 200) {
-      https.end();
-      server.send(500, "application/json", "{\"error\":\"HTTP " + String(code) + "\"}");
-      return;
-    }
-
-    File f = LittleFS.open("/index.html", "w");
-    if (!f) {
-      https.end();
-      server.send(500, "application/json", "{\"error\":\"LittleFS write failed\"}");
-      return;
-    }
-
-    WiFiClient* stream = https.getStreamPtr();
-    size_t written = 0;
-    uint8_t buf[512];
-    unsigned long timeout = millis();
-    while ((https.connected() || stream->available()) && (millis() - timeout < 10000)) {
-      size_t avail = stream->available();
-      if (avail) {
-        size_t n = stream->readBytes(buf, min(avail, sizeof(buf)));
-        f.write(buf, n);
-        written += n;
-        timeout = millis(); // reset timeout on data received
-      }
-      delay(1);
-    }
-    f.close();
-    https.end();
-
-    Serial.printf("[CLOUD] UI update complete — %u bytes\n", written);
-    server.send(200, "application/json",
-      "{\"message\":\"UI updated\",\"bytes\":" + String(written) + "}");
   });
 
   // ── POST /api/update/firmware — pull .bin from GitHub releases and flash ─

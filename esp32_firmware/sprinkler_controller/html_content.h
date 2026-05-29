@@ -288,10 +288,6 @@ select:focus, input[type="number"]:focus { outline: none; border-color: #4fc3f7;
       </div>
       <button class="upd-btn" id="btn-upd-fw" onclick="cloudUpdate('firmware')">Download &amp; Flash from GitHub</button>
     </div>
-    <div class="settings-row" style="flex-direction:column;align-items:flex-start;gap:10px">
-      <span class="settings-label">Web UI</span>
-      <button class="upd-btn" id="btn-upd-ui" onclick="cloudUpdate('ui')">Download &amp; Apply from GitHub</button>
-    </div>
     <div class="settings-row" id="upd-status-row" style="display:none">
       <span id="upd-status" style="font-size:1rem;color:#4fc3f7;width:100%;text-align:center"></span>
     </div>
@@ -753,32 +749,22 @@ function updateZname(i, v) {
 
 // ── Cloud Updates ──────────────────────────────────────
 async function cloudUpdate(type) {
-  const isfw = type === 'firmware';
-  const btn = document.getElementById(isfw ? 'btn-upd-fw' : 'btn-upd-ui');
+  const btn = document.getElementById('btn-upd-fw');
   const row = document.getElementById('upd-status-row');
   const status = document.getElementById('upd-status');
 
-  if (!confirm(isfw
-    ? 'Download and flash new firmware from GitHub?\nThe board will reboot when done.'
-    : 'Download and apply new UI from GitHub?\nThe page will reload when done.')) return;
+  if (!confirm('Download and flash new firmware from GitHub?\nThe board will reboot when done.')) return;
 
   btn.disabled = true;
   row.style.display = 'flex';
   status.style.color = '#4fc3f7';
-  status.textContent = isfw ? 'Downloading firmware...' : 'Downloading UI...';
+  status.textContent = 'Downloading firmware...';
 
   try {
-    const r = await POST(`/api/update/${type}`);
-    if (isfw) {
-      status.style.color = '#81c784';
-      status.textContent = 'Flashing... board will reboot shortly.';
-      // Wait for reboot then reload
-      setTimeout(() => location.reload(), 15000);
-    } else {
-      status.style.color = '#81c784';
-      status.textContent = `Done — ${r.bytes || ''} bytes. Reloading...`;
-      setTimeout(() => location.reload(), 2000);
-    }
+    await POST('/api/update/firmware');
+    status.style.color = '#81c784';
+    status.textContent = 'Flashing... board will reboot shortly.';
+    setTimeout(() => location.reload(), 15000);
   } catch(e) {
     status.style.color = '#ef5350';
     status.textContent = 'Update failed — check Serial Monitor';
