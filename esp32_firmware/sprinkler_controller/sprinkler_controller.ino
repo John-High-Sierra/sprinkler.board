@@ -448,53 +448,117 @@ void runSequenceTask(void* param) {
 
   stopRequested = false;
 
-  for (int z = 0; z < NUM_ZONES; z++) {
-    if (stopRequested) {
-      Serial.println("[RUN] Stop requested, halting sequence");
-      break;
+  if (boardConfig.cycleAndSoakEnabled) {
+    // ── Cycle & Soak mode ────────────────────────────────
+    int cycleTimeSec = boardConfig.cycleTime * 60;
+    int remaining[NUM_ZONES];
+    int activeCount = 0;
+    for (int z = 0; z < NUM_ZONES; z++) {
+      remaining[z] = daySched.durations[z] * 60;
+      if (remaining[z] > 0) activeCount++;
     }
 
-    int durMin = daySched.durations[z];
-    if (durMin <= 0) {
-      Serial.printf("[RUN] Zone %d skipped (duration=0)\n", z + 1);
-      continue;
+    int passNum = 0;
+    while (!stopRequested) {
+      bool anyLeft = false;
+      for (int z = 0; z < NUM_ZONES; z++) {
+        if (remaining[z] > 0) { anyLeft = true; break; }
+      }
+      if (!anyLeft) break;
+
+      passNum++;
+      Serial.printf("[RUN] C&S pass %d\n", passNum);
+
+      for (int z = 0; z < NUM_ZONES; z++) {
+        if (stopRequested) break;
+        if (remaining[z] <= 0) continue;
+
+        int thisRun = min(cycleTimeSec, remaining[z]);
+        Serial.printf("[RUN] C&S pass %d zone %d: %d sec\n", passNum, z + 1, thisRun);
+        RELAY_ON(RELAY_PINS[z]);
+
+        int elapsed = 0;
+        while (elapsed < thisRun && !stopRequested) {
+          xSemaphoreTake(statusMutex, portMAX_DELAY);
+          runStatus.isRunning     = true;
+          runStatus.dayIndex      = dayIndex;
+          runStatus.activeZone    = z;
+          runStatus.remainingTime = remaining[z] - elapsed;
+          runStatus.manualRun     = manual;
+          xSemaphoreGive(statusMutex);
+          vTaskDelay(pdMS_TO_TICKS(1000));
+          elapsed++;
+        }
+
+        remaining[z] -= elapsed;
+        RELAY_OFF(RELAY_PINS[z]);
+        Serial.printf("[RUN] C&S zone %d OFF, %d sec remaining\n", z + 1, remaining[z]);
+
+        // Single active zone: explicit soak between cycles
+        if (activeCount == 1 && remaining[z] > 0 && !stopRequested) {
+          Serial.printf("[RUN] C&S soaking %d sec\n", cycleTimeSec);
+          int soakElapsed = 0;
+          while (soakElapsed < cycleTimeSec && !stopRequested) {
+            xSemaphoreTake(statusMutex, portMAX_DELAY);
+            runStatus.isRunning     = true;
+            runStatus.dayIndex      = dayIndex;
+            runStatus.activeZone    = -1;
+            runStatus.remainingTime = remaining[z];
+            runStatus.manualRun     = manual;
+            xSemaphoreGive(statusMutex);
+            vTaskDelay(pdMS_TO_TICKS(1000));
+            soakElapsed++;
+          }
+        }
+      }
     }
 
-    Serial.printf("[RUN] Zone %d ON for %d min\n", z + 1, durMin);
-    RELAY_ON(RELAY_PINS[z]);
-    int remaining = durMin * 60;
-
-    while (remaining > 0) {
+  } else {
+    // ── Standard sequential mode ─────────────────────────
+    for (int z = 0; z < NUM_ZONES; z++) {
       if (stopRequested) {
-        Serial.printf("[RUN] Stop during zone %d\n", z + 1);
+        Serial.println("[RUN] Stop requested, halting sequence");
         break;
       }
 
-      xSemaphoreTake(statusMutex, portMAX_DELAY);
-      runStatus.isRunning    = true;
-      runStatus.dayIndex     = dayIndex;
-      runStatus.activeZone   = z;
-      runStatus.remainingTime = remaining;
-      runStatus.manualRun    = manual;
-      xSemaphoreGive(statusMutex);
+      int durMin = daySched.durations[z];
+      if (durMin <= 0) {
+        Serial.printf("[RUN] Zone %d skipped (duration=0)\n", z + 1);
+        continue;
+      }
 
-      vTaskDelay(pdMS_TO_TICKS(1000));
-      remaining--;
+      Serial.printf("[RUN] Zone %d ON for %d min\n", z + 1, durMin);
+      RELAY_ON(RELAY_PINS[z]);
+      int rem = durMin * 60;
+
+      while (rem > 0) {
+        if (stopRequested) {
+          Serial.printf("[RUN] Stop during zone %d\n", z + 1);
+          break;
+        }
+        xSemaphoreTake(statusMutex, portMAX_DELAY);
+        runStatus.isRunning     = true;
+        runStatus.dayIndex      = dayIndex;
+        runStatus.activeZone    = z;
+        runStatus.remainingTime = rem;
+        runStatus.manualRun     = manual;
+        xSemaphoreGive(statusMutex);
+        vTaskDelay(pdMS_TO_TICKS(1000));
+        rem--;
+      }
+
+      RELAY_OFF(RELAY_PINS[z]);
+      Serial.printf("[RUN] Zone %d OFF\n", z + 1);
+      if (stopRequested) break;
     }
-
-    RELAY_OFF(RELAY_PINS[z]);
-    Serial.printf("[RUN] Zone %d OFF\n", z + 1);
-
-    if (stopRequested) break;
   }
 
-  // Cleanup
   allRelaysOff();
 
   xSemaphoreTake(statusMutex, portMAX_DELAY);
-  runStatus.isRunning    = false;
-  runStatus.dayIndex     = -1;
-  runStatus.activeZone   = -1;
+  runStatus.isRunning     = false;
+  runStatus.dayIndex      = -1;
+  runStatus.activeZone    = -1;
   runStatus.remainingTime = 0;
   xSemaphoreGive(statusMutex);
 
