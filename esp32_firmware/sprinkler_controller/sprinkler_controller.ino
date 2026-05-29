@@ -286,16 +286,19 @@ void loadConfig() {
   File f = LittleFS.open(CONFIG_FILE, "r");
   if (!f) return;
   DynamicJsonDocument doc(512);
-  if (deserializeJson(doc, f) == DeserializationError::Ok) {
-    const char* tz = doc["timezone"];
-    if (tz) strlcpy(boardConfig.timezone, tz, sizeof(boardConfig.timezone));
-    boardConfig.latitude        = doc["latitude"]        | 0.0f;
-    boardConfig.longitude       = doc["longitude"]       | 0.0f;
-    boardConfig.weatherEnabled  = doc["weather_enabled"] | false;
-    boardConfig.rainThreshold   = doc["rain_threshold"]  | 50;
-    boardConfig.freezeThreshold = doc["freeze_threshold"]| 2.0f;
-  }
+  DeserializationError err = deserializeJson(doc, f);
   f.close();
+  if (err) {
+    Serial.printf("[CFG] JSON parse error: %s, using defaults\n", err.c_str());
+    return;
+  }
+  const char* tz = doc["timezone"];
+  if (tz) strlcpy(boardConfig.timezone, tz, sizeof(boardConfig.timezone));
+  boardConfig.latitude        = doc["latitude"]        | 0.0f;
+  boardConfig.longitude       = doc["longitude"]       | 0.0f;
+  boardConfig.weatherEnabled  = doc["weather_enabled"] | false;
+  boardConfig.rainThreshold   = doc["rain_threshold"]  | 50;
+  boardConfig.freezeThreshold = doc["freeze_threshold"]| 2.0f;
   Serial.printf("[CFG] Timezone: %s  Lat: %.4f  Lon: %.4f  WeatherSkip: %s\n",
     boardConfig.timezone, boardConfig.latitude, boardConfig.longitude,
     boardConfig.weatherEnabled ? "ON" : "OFF");
