@@ -386,6 +386,15 @@ void fetchWeather() {
     weatherCache.rainProbTomorrow, weatherCache.minTempToday);
 }
 
+void weatherTask(void* param) {
+  vTaskDelay(pdMS_TO_TICKS(5000)); // wait 5s for WiFi/NTP to settle
+  fetchWeather();
+  while (true) {
+    vTaskDelay(pdMS_TO_TICKS(3600000)); // fetch every hour
+    fetchWeather();
+  }
+}
+
 // ═══════════════════════════════════════════════════════════════
 //  SPRINKLER SEQUENCE TASK (runs on separate FreeRTOS task)
 // ═══════════════════════════════════════════════════════════════
@@ -820,6 +829,25 @@ void setupRoutes() {
   // ── GET /api/system_info ──────────────────────────────────────
   server.on("/api/system_info", HTTP_GET, []() {
     server.send(200, "application/json", buildSystemInfoJson());
+  });
+
+  // ── GET /api/weather ──────────────────────────────────────────
+  server.on("/api/weather", HTTP_GET, []() {
+    DynamicJsonDocument doc(512);
+    xSemaphoreTake(weatherMutex, portMAX_DELAY);
+    doc["valid"]              = weatherCache.valid;
+    doc["current_temp"]       = weatherCache.currentTemp;
+    doc["min_temp_today"]     = weatherCache.minTempToday;
+    doc["rain_prob_today"]    = weatherCache.rainProbToday;
+    doc["rain_prob_tomorrow"] = weatherCache.rainProbTomorrow;
+    doc["weather_code"]       = weatherCache.weatherCode;
+    doc["fetched_ago_sec"]    = weatherCache.valid ? (long)((millis() - weatherCache.fetchedAt) / 1000) : -1;
+    xSemaphoreGive(weatherMutex);
+    doc["weather_enabled"]    = boardConfig.weatherEnabled;
+    doc["rain_threshold"]     = boardConfig.rainThreshold;
+    doc["freeze_threshold"]   = boardConfig.freezeThreshold;
+    String out; serializeJson(doc, out);
+    server.send(200, "application/json", out);
   });
 
   // ── POST /api/relay_test  body: {"zone": 0-7, "state": 0|1} ──
@@ -1264,6 +1292,7 @@ void setup() {
   // Background tasks
   xTaskCreate(scheduleCheckerTask, "sched_check", 4096, NULL, 1, NULL);
   xTaskCreate(ledTask,             "led_blink",   1024, NULL, 1, NULL);
+  xTaskCreate(weatherTask,         "weather",     8192, NULL, 1, NULL);
 
   Serial.println("[BOOT] All systems GO");
 }
