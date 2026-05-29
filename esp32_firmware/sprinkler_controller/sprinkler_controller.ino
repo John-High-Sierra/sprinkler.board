@@ -362,7 +362,7 @@ void fetchWeather() {
     return;
   }
 
-  DynamicJsonDocument doc(1024);
+  DynamicJsonDocument doc(2048);
   DeserializationError err = deserializeJson(doc, https.getStream());
   https.end();
 
