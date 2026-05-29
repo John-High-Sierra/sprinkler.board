@@ -139,6 +139,11 @@ WebServer         server(80);
 // ── Board config (timezone, etc.) persisted in config.json ──
 struct BoardConfig {
   char timezone[64];
+  float latitude;
+  float longitude;
+  bool weatherEnabled;
+  int  rainThreshold;    // percent 0-100, skip if forecast >= this
+  float freezeThreshold; // degrees C, skip if min temp <= this
 };
 BoardConfig boardConfig;
 
@@ -271,26 +276,44 @@ bool saveSchedule() {
 // ═══════════════════════════════════════════════════════════════
 void loadConfig() {
   strlcpy(boardConfig.timezone, DEFAULT_TZ, sizeof(boardConfig.timezone));
+  boardConfig.latitude       = 0.0f;
+  boardConfig.longitude      = 0.0f;
+  boardConfig.weatherEnabled = false;
+  boardConfig.rainThreshold  = 50;
+  boardConfig.freezeThreshold = 2.0f;
+
   if (!LittleFS.exists(CONFIG_FILE)) return;
   File f = LittleFS.open(CONFIG_FILE, "r");
   if (!f) return;
-  DynamicJsonDocument doc(256);
+  DynamicJsonDocument doc(512);
   if (deserializeJson(doc, f) == DeserializationError::Ok) {
     const char* tz = doc["timezone"];
     if (tz) strlcpy(boardConfig.timezone, tz, sizeof(boardConfig.timezone));
+    boardConfig.latitude        = doc["latitude"]        | 0.0f;
+    boardConfig.longitude       = doc["longitude"]       | 0.0f;
+    boardConfig.weatherEnabled  = doc["weather_enabled"] | false;
+    boardConfig.rainThreshold   = doc["rain_threshold"]  | 50;
+    boardConfig.freezeThreshold = doc["freeze_threshold"]| 2.0f;
   }
   f.close();
-  Serial.printf("[CFG] Timezone: %s\n", boardConfig.timezone);
+  Serial.printf("[CFG] Timezone: %s  Lat: %.4f  Lon: %.4f  WeatherSkip: %s\n",
+    boardConfig.timezone, boardConfig.latitude, boardConfig.longitude,
+    boardConfig.weatherEnabled ? "ON" : "OFF");
 }
 
 void saveConfig() {
-  DynamicJsonDocument doc(256);
-  doc["timezone"] = boardConfig.timezone;
+  DynamicJsonDocument doc(512);
+  doc["timezone"]         = boardConfig.timezone;
+  doc["latitude"]         = boardConfig.latitude;
+  doc["longitude"]        = boardConfig.longitude;
+  doc["weather_enabled"]  = boardConfig.weatherEnabled;
+  doc["rain_threshold"]   = boardConfig.rainThreshold;
+  doc["freeze_threshold"] = boardConfig.freezeThreshold;
   File f = LittleFS.open(CONFIG_FILE, "w");
   if (!f) return;
   serializeJson(doc, f);
   f.close();
-  Serial.printf("[CFG] Config saved: tz=%s\n", boardConfig.timezone);
+  Serial.printf("[CFG] Config saved\n");
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -689,8 +712,13 @@ void setupRoutes() {
 
   // ── GET /api/config ───────────────────────────────────────────
   server.on("/api/config", HTTP_GET, []() {
-    DynamicJsonDocument doc(256);
-    doc["timezone"] = boardConfig.timezone;
+    DynamicJsonDocument doc(512);
+    doc["timezone"]         = boardConfig.timezone;
+    doc["latitude"]         = boardConfig.latitude;
+    doc["longitude"]        = boardConfig.longitude;
+    doc["weather_enabled"]  = boardConfig.weatherEnabled;
+    doc["rain_threshold"]   = boardConfig.rainThreshold;
+    doc["freeze_threshold"] = boardConfig.freezeThreshold;
     String out; serializeJson(doc, out);
     server.send(200, "application/json", out);
   });
@@ -698,16 +726,23 @@ void setupRoutes() {
   // ── POST /api/config  body: {"timezone":"EST5EDT,M3.2.0,M11.1.0"} ──
   server.on("/api/config", HTTP_POST, []() {
     if (!server.hasArg("plain")) { server.send(400, "application/json", "{\"error\":\"No body\"}"); return; }
-    DynamicJsonDocument doc(256);
+    DynamicJsonDocument doc(512);
     if (deserializeJson(doc, server.arg("plain")) != DeserializationError::Ok) {
       server.send(400, "application/json", "{\"error\":\"Invalid JSON\"}"); return;
     }
-    const char* tz = doc["timezone"];
-    if (!tz || strlen(tz) == 0 || strlen(tz) >= sizeof(boardConfig.timezone)) {
-      server.send(400, "application/json", "{\"error\":\"Invalid timezone\"}"); return;
+    if (doc.containsKey("timezone")) {
+      const char* tz = doc["timezone"];
+      if (!tz || strlen(tz) == 0 || strlen(tz) >= sizeof(boardConfig.timezone)) {
+        server.send(400, "application/json", "{\"error\":\"Invalid timezone\"}"); return;
+      }
+      strlcpy(boardConfig.timezone, tz, sizeof(boardConfig.timezone));
+      applyTimezone();
     }
-    strlcpy(boardConfig.timezone, tz, sizeof(boardConfig.timezone));
-    applyTimezone();
+    if (doc.containsKey("latitude"))         boardConfig.latitude        = doc["latitude"].as<float>();
+    if (doc.containsKey("longitude"))        boardConfig.longitude       = doc["longitude"].as<float>();
+    if (doc.containsKey("weather_enabled"))  boardConfig.weatherEnabled  = doc["weather_enabled"].as<bool>();
+    if (doc.containsKey("rain_threshold"))   boardConfig.rainThreshold   = doc["rain_threshold"].as<int>();
+    if (doc.containsKey("freeze_threshold")) boardConfig.freezeThreshold = doc["freeze_threshold"].as<float>();
     saveConfig();
     server.send(200, "application/json", "{\"message\":\"Config saved\"}");
   });
