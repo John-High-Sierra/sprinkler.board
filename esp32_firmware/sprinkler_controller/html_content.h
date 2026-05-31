@@ -169,6 +169,32 @@ select:focus, input[type="number"]:focus { outline: none; border-color: #4fc3f7;
 .wx-no-data-icon { font-size: 3rem; margin-bottom: 12px; }
 .wx-no-data p { font-size: 1rem; line-height: 1.6; }
 
+/* ── Unit toggle ──────────────────────────────────────────── */
+.wx-unit-row { display:flex; justify-content:center; margin-bottom:14px; }
+.unit-toggle { display:flex; align-items:center; background:#131f2e; border:1.5px solid #1a3a5c; border-radius:24px; padding:3px; position:relative; }
+.unit-btn { background:none; border:none; color:#607080; font-family:inherit; font-size:0.85rem; font-weight:700; letter-spacing:1px; padding:5px 18px; cursor:pointer; border-radius:20px; transition:color 0.2s; position:relative; z-index:1; }
+.unit-btn.active { color:#0d1b2a; }
+.unit-slider { position:absolute; top:3px; left:3px; height:calc(100% - 6px); background:#4fc3f7; border-radius:20px; transition:transform 0.25s cubic-bezier(.4,0,.2,1), width 0.25s; pointer-events:none; }
+
+/* ── 5-day forecast strip ────────────────────────────── */
+.wx-forecast-hdr { font-size:0.75rem; color:#607080; text-transform:uppercase; letter-spacing:2px; font-weight:600; margin:14px 0 8px; display:flex; align-items:center; gap:8px; }
+.wx-forecast-hdr::after { content:''; flex:1; height:1px; background:linear-gradient(90deg,#1a3a5c,transparent); }
+.forecast-strip { display:flex; gap:8px; margin-bottom:14px; }
+.fc-card { flex:1; background:#131f2e; border:1.5px solid #1a3a5c; border-radius:14px; padding:10px 6px 8px; display:flex; flex-direction:column; align-items:center; gap:4px; transition:border-color 0.2s, transform 0.2s; cursor:default; }
+.fc-card:hover { border-color:#4fc3f7; transform:translateY(-2px); }
+.fc-card.fc-today { border-color:#4fc3f7; background:#0e2030; }
+.fc-day { font-size:0.62rem; font-weight:700; text-transform:uppercase; letter-spacing:1.5px; color:#607080; }
+.fc-card.fc-today .fc-day { color:#4fc3f7; }
+.fc-icon { font-size:1.5rem; line-height:1; }
+.fc-hi { font-size:1rem; font-weight:700; line-height:1; }
+.fc-lo { font-size:0.78rem; color:#4fc3f7; line-height:1; }
+.fc-bar-track { width:calc(100% - 8px); height:3px; background:rgba(79,195,247,0.12); border-radius:2px; overflow:hidden; }
+.fc-bar-fill { height:100%; border-radius:2px; }
+.fc-rain { display:flex; align-items:center; gap:3px; width:calc(100% - 8px); }
+.fc-rain-pct { font-size:0.65rem; font-weight:700; min-width:22px; }
+.fc-rain-track { flex:1; height:2px; background:rgba(79,195,247,0.12); border-radius:1px; overflow:hidden; }
+.fc-rain-fill { height:100%; border-radius:1px; }
+
 /* ── Toast ────────────────────────────────────────────── */
 #toasts { position: fixed; bottom: 80px; right: 12px; display: flex; flex-direction: column; gap: 7px; z-index: 999; pointer-events: none; }
 .toast { padding: 13px 18px; border-radius: 10px; font-size: 1.05rem; font-weight: 600; animation: tin .3s ease, tout .3s ease 2.7s forwards; max-width: 280px; }
@@ -362,7 +388,7 @@ select:focus, input[type="number"]:focus { outline: none; border-color: #4fc3f7;
       <span class="settings-label">Skip if temp below</span>
       <div style="display:flex;align-items:center;gap:6px">
         <input id="freeze-thresh-inp" type="number" step="0.5" class="tz-inp" style="width:60px" value="2">
-        <span class="settings-val">°C</span>
+        <span class="settings-val" id="freeze-unit-lbl">°C</span>
       </div>
     </div>
     <div class="settings-row">
@@ -462,8 +488,15 @@ select:focus, input[type="number"]:focus { outline: none; border-color: #4fc3f7;
   <div id="wx-page-content" style="display:none">
     <div class="wx-hero">
       <div class="wx-hero-icon" id="wxp-icon">🌤</div>
-      <div class="wx-hero-temp" id="wxp-temp">--°C</div>
+      <div class="wx-hero-temp" id="wxp-temp">--°</div>
       <div class="wx-hero-desc" id="wxp-desc">--</div>
+    </div>
+    <div class="wx-unit-row">
+      <div class="unit-toggle">
+        <div class="unit-slider" id="wx-unit-slider"></div>
+        <button class="unit-btn active" id="wx-btn-c" onclick="setTempUnit('C')">°C</button>
+        <button class="unit-btn"        id="wx-btn-f" onclick="setTempUnit('F')">°F</button>
+      </div>
     </div>
     <div class="wx-grid">
       <div class="wx-card" id="wxp-rain-today-card">
@@ -491,6 +524,8 @@ select:focus, input[type="number"]:focus { outline: none; border-color: #4fc3f7;
       <div class="wx-skip-label" id="wxp-skip-label">Weather Skip</div>
       <div class="wx-skip-reason" id="wxp-skip-reason">--</div>
     </div>
+    <div class="wx-forecast-hdr">5-Day Forecast</div>
+    <div class="forecast-strip" id="wxp-forecast-strip"></div>
   </div>
 </div>
 
@@ -567,6 +602,19 @@ async function POST(p,b) {
     return {message:'OK'};
   }
   return (await fetch(p,{method:'POST',headers:{'Content-Type':'application/json'},body:b!==undefined?JSON.stringify(b):undefined})).json();
+}
+
+// ── Temperature unit preference ────────────────────────
+let wxTempUnit = 'C';
+
+function fmtTemp(c) {
+  if (wxTempUnit === 'F') return (c * 9/5 + 32).toFixed(1) + '°F';
+  return c.toFixed(1) + '°C';
+}
+
+function fmtTempRound(c) {
+  if (wxTempUnit === 'F') return Math.round(c * 9/5 + 32) + '°';
+  return Math.round(c) + '°';
 }
 
 function toast(msg,type='ok') {
@@ -980,10 +1028,12 @@ async function saveLocation() {
 }
 
 async function saveWeatherSettings() {
+  let ft = parseFloat(document.getElementById('freeze-thresh-inp').value);
+  if (wxTempUnit === 'F') ft = (ft - 32) * 5/9;  // always store in °C
   const r = await POST('/api/config', {
     weather_enabled:  document.getElementById('weather-skip-chk').checked,
     rain_threshold:   parseInt(document.getElementById('rain-thresh-inp').value),
-    freeze_threshold: parseFloat(document.getElementById('freeze-thresh-inp').value)
+    freeze_threshold: parseFloat(ft.toFixed(2))
   });
   r.message ? toast('Weather settings saved ✓') : toast(r.error || 'Save failed','err');
 }
@@ -991,11 +1041,14 @@ async function saveWeatherSettings() {
 async function loadWeatherSettings() {
   try {
     const r = await GET('/api/config');
+    if (r.temp_unit) wxTempUnit = r.temp_unit;
     if (r.latitude  !== undefined) document.getElementById('lat-inp').value = r.latitude;
     if (r.longitude !== undefined) document.getElementById('lon-inp').value = r.longitude;
-    document.getElementById('weather-skip-chk').checked    = r.weather_enabled  || false;
-    document.getElementById('rain-thresh-inp').value        = r.rain_threshold   ?? 50;
-    document.getElementById('freeze-thresh-inp').value      = r.freeze_threshold ?? 2;
+    document.getElementById('weather-skip-chk').checked = r.weather_enabled  || false;
+    document.getElementById('rain-thresh-inp').value     = r.rain_threshold   ?? 50;
+    const ft = r.freeze_threshold ?? 2;
+    document.getElementById('freeze-thresh-inp').value   = wxTempUnit === 'F' ? (ft * 9/5 + 32).toFixed(1) : ft;
+    document.getElementById('freeze-unit-lbl').textContent = '°' + wxTempUnit;
   } catch(e) {}
 }
 
@@ -1031,12 +1084,13 @@ async function updateWeatherWidget() {
     const w = await GET('/api/weather');
     const card = document.getElementById('weather-card');
     if (!w.valid) { card.style.display = 'none'; return; }
+    if (w.temp_unit) wxTempUnit = w.temp_unit;
     card.style.display = 'block';
     document.getElementById('wx-icon').textContent          = WX_ICONS[w.weather_code] || '🌡';
-    document.getElementById('wx-temp').textContent          = w.current_temp.toFixed(1) + '°C';
+    document.getElementById('wx-temp').textContent          = fmtTemp(w.current_temp);
     document.getElementById('wx-rain-today').textContent    = w.rain_prob_today + '%';
     document.getElementById('wx-rain-tomorrow').textContent = w.rain_prob_tomorrow + '%';
-    document.getElementById('wx-min-temp').textContent      = w.min_temp_today.toFixed(1) + '°C';
+    document.getElementById('wx-min-temp').textContent      = fmtTemp(w.min_temp_today);
     const ageMin = Math.round(w.fetched_ago_sec / 60);
     document.getElementById('wx-age').textContent           = ageMin < 2 ? 'just updated' : `${ageMin}m ago`;
     const warn = document.getElementById('wx-skip-warn');
@@ -1046,7 +1100,7 @@ async function updateWeatherWidget() {
         warn.textContent = `⚠ Watering will be skipped — rain forecast (${Math.max(w.rain_prob_today, w.rain_prob_tomorrow)}% ≥ ${w.rain_threshold}% threshold)`;
       } else if (w.min_temp_today <= w.freeze_threshold) {
         warn.style.display = 'block';
-        warn.textContent = `⚠ Watering will be skipped — freeze risk (min ${w.min_temp_today.toFixed(1)}°C ≤ ${w.freeze_threshold}°C threshold)`;
+        warn.textContent = `⚠ Watering will be skipped — freeze risk (min ${fmtTemp(w.min_temp_today)} ≤ ${fmtTemp(w.freeze_threshold)} threshold)`;
       } else {
         warn.style.display = 'none';
       }
@@ -1074,8 +1128,9 @@ async function updateWeatherPage() {
     if (!w.valid) { nodata.style.display='block'; content.style.display='none'; return; }
     nodata.style.display = 'none'; content.style.display = 'block';
 
+    if (w.temp_unit) { wxTempUnit = w.temp_unit; syncUnitToggle(); }
     document.getElementById('wxp-icon').textContent = WX_ICONS[w.weather_code] || '🌡';
-    document.getElementById('wxp-temp').textContent = w.current_temp.toFixed(1) + '°C';
+    document.getElementById('wxp-temp').textContent = fmtTemp(w.current_temp);
     document.getElementById('wxp-desc').textContent = WX_DESCS[w.weather_code] || 'Unknown';
 
     // Rain cards — highlight if above threshold
@@ -1086,13 +1141,15 @@ async function updateWeatherPage() {
 
     // Min temp card — highlight if freeze risk
     const freezeRisk = w.weather_enabled && w.min_temp_today <= w.freeze_threshold;
-    document.getElementById('wxp-min-temp').textContent = w.min_temp_today.toFixed(1) + '°C';
+    document.getElementById('wxp-min-temp').textContent = fmtTemp(w.min_temp_today);
     document.getElementById('wxp-min-card').className   = 'wx-card' + (freezeRisk ? ' freeze' : '');
     document.getElementById('wxp-freeze-sub').textContent = freezeRisk ? '❄ Freeze risk!' : 'overnight low';
 
     // Age
     const ageMin = Math.round(w.fetched_ago_sec / 60);
     document.getElementById('wxp-age').textContent = ageMin < 2 ? 'Just now' : `${ageMin}m ago`;
+
+    renderForecastStrip(w.forecast);
 
     // Skip status box
     const box    = document.getElementById('wxp-skip-box');
@@ -1112,7 +1169,7 @@ async function updateWeatherPage() {
       box.className = 'wx-skip-box skipping';
       lbl.style.color = '#81d4fa';
       lbl.textContent = '❄ Watering Will Be Skipped';
-      reason.textContent = `Freeze risk: min ${w.min_temp_today.toFixed(1)}°C ≤ ${w.freeze_threshold}°C threshold`;
+      reason.textContent = `Freeze risk: min ${fmtTemp(w.min_temp_today)} ≤ ${fmtTemp(w.freeze_threshold)} threshold`;
     } else {
       box.className = 'wx-skip-box active';
       lbl.style.color = '#81c784';
@@ -1120,6 +1177,96 @@ async function updateWeatherPage() {
       reason.textContent = `No rain or freeze risk detected. Next scheduled run will proceed.`;
     }
   } catch(e) {}
+}
+
+// ── Unit toggle ────────────────────────────────────────
+function syncUnitToggle() {
+  const btnC   = document.getElementById('wx-btn-c');
+  const btnF   = document.getElementById('wx-btn-f');
+  const slider = document.getElementById('wx-unit-slider');
+  if (!btnC || !btnF || !slider) return;
+  btnC.classList.toggle('active', wxTempUnit === 'C');
+  btnF.classList.toggle('active', wxTempUnit === 'F');
+  slider.style.width     = (wxTempUnit === 'C' ? btnC : btnF).offsetWidth + 'px';
+  slider.style.transform = wxTempUnit === 'C' ? 'translateX(0)' : `translateX(${btnC.offsetWidth}px)`;
+}
+
+async function setTempUnit(u) {
+  wxTempUnit = u;
+  syncUnitToggle();
+  // update freeze threshold label in settings if visible
+  const lbl = document.getElementById('freeze-unit-lbl');
+  if (lbl) lbl.textContent = '°' + u;
+  await POST('/api/config', { temp_unit: u });
+  updateWeatherPage();
+  updateWeatherWidget();
+}
+
+// ── 5-Day forecast strip ───────────────────────────────
+function tempColor(c) {
+  // 5°C (ice blue) → 35°C (amber)
+  const t = Math.max(0, Math.min(1, (c - 5) / 30));
+  const lerpHex = (a, b, t) => {
+    const ah = parseInt(a.slice(1),16), bh = parseInt(b.slice(1),16);
+    const r = Math.round(((ah>>16)&0xff) + (((bh>>16)&0xff)-((ah>>16)&0xff))*t);
+    const g = Math.round(((ah>>8)&0xff)  + (((bh>>8)&0xff) -((ah>>8)&0xff))*t);
+    const bl= Math.round((ah&0xff)       + ((bh&0xff)       -(ah&0xff))*t);
+    return `#${((r<<16)|(g<<8)|bl).toString(16).padStart(6,'0')}`;
+  };
+  return t < 0.5 ? lerpHex('#4fc3f7','#ffca28',t*2) : lerpHex('#ffca28','#ef6c00',(t-0.5)*2);
+}
+
+function rainColor(pct) {
+  if (pct < 20)  return '#4fc3f7';
+  if (pct < 50)  return '#1e88e5';
+  if (pct < 70)  return '#1565c0';
+  return '#0d47a1';
+}
+
+const DAY_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+
+function renderForecastStrip(forecast) {
+  const strip = document.getElementById('wxp-forecast-strip');
+  if (!strip || !forecast || !forecast.length) return;
+
+  // Get absolute temp range across all days for bar sizing
+  const allHi = forecast.map(d => d.hi);
+  const allLo = forecast.map(d => d.lo);
+  const absMin = Math.min(...allLo) - 2;
+  const absMax = Math.max(...allHi) + 2;
+  const span   = absMax - absMin || 1;
+
+  const now    = new Date();
+  strip.innerHTML = '';
+
+  forecast.forEach((d, i) => {
+    const dayDate  = new Date(now); dayDate.setDate(now.getDate() + i);
+    const dayLabel = i === 0 ? 'Today' : DAY_NAMES[dayDate.getDay()];
+    const hiC      = wxTempUnit === 'F' ? Math.round(d.hi * 9/5 + 32) : Math.round(d.hi);
+    const loC      = wxTempUnit === 'F' ? Math.round(d.lo * 9/5 + 32) : Math.round(d.lo);
+    const hiColor  = tempColor(d.hi);
+    const loColor  = tempColor(d.lo);
+    const rColor   = rainColor(d.rain);
+    const barLeft  = ((d.lo - absMin) / span * 100).toFixed(1);
+    const barWidth = ((d.hi - d.lo)   / span * 100).toFixed(1);
+    const icon     = WX_ICONS[d.code] || '🌡';
+
+    const card = document.createElement('div');
+    card.className = 'fc-card' + (i === 0 ? ' fc-today' : '');
+    card.innerHTML = `
+      <div class="fc-day">${dayLabel}</div>
+      <div class="fc-icon">${icon}</div>
+      <div class="fc-hi" style="color:${hiColor}">${hiC}°</div>
+      <div class="fc-lo" style="color:${loColor}">${loC}°</div>
+      <div class="fc-bar-track">
+        <div class="fc-bar-fill" style="margin-left:${barLeft}%;width:${barWidth}%;background:linear-gradient(90deg,${loColor},${hiColor})"></div>
+      </div>
+      <div class="fc-rain">
+        <span class="fc-rain-pct" style="color:${rColor}">${d.rain}%</span>
+        <div class="fc-rain-track"><div class="fc-rain-fill" style="width:${d.rain}%;background:${rColor}"></div></div>
+      </div>`;
+    strip.appendChild(card);
+  });
 }
 
 function refreshWeatherPage() { updateWeatherPage(); updateWeatherWidget(); }
@@ -1134,6 +1281,7 @@ setInterval(pollStatus, 2000);
 setInterval(pollInfo, 15000);
 updateWeatherWidget();
 setInterval(updateWeatherWidget, 300000); // refresh every 5 minutes
+syncUnitToggle();
 </script>
 </body>
 </html>
