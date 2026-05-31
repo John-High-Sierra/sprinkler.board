@@ -151,15 +151,16 @@ struct BoardConfig {
 BoardConfig boardConfig;
 
 struct WeatherCache {
-  float currentTemp;      // degrees C
-  float minTempToday;     // degrees C
-  int   rainProbToday;    // percent
-  int   rainProbTomorrow; // percent
-  int   weatherCode;      // WMO code
+  float currentTemp;   // degrees C, current conditions
+  int   currentCode;   // WMO weather code, current conditions
   bool  valid;
-  unsigned long fetchedAt; // millis() when last fetched
+  unsigned long fetchedAt;
+  float hiTemps[5];    // degrees C, daily max, index 0 = today
+  float loTemps[5];    // degrees C, daily min, index 0 = today
+  int   rainProb[5];   // percent, index 0 = today
+  int   codes[5];      // WMO weather code, daily, index 0 = today
 };
-WeatherCache weatherCache = {0, 0, 0, 0, 0, false, 0};
+WeatherCache weatherCache = {};
 SemaphoreHandle_t weatherMutex;
 TaskHandle_t      weatherTaskHandle = NULL;
 
@@ -351,13 +352,13 @@ void saveConfig() {
 void fetchWeather() {
   if (boardConfig.latitude == 0.0f && boardConfig.longitude == 0.0f) return;
 
-  char url[256];
+  char url[384];
   snprintf(url, sizeof(url),
     "https://api.open-meteo.com/v1/forecast"
     "?latitude=%.4f&longitude=%.4f"
     "&current=temperature_2m,weathercode,precipitation"
-    "&daily=precipitation_probability_max,temperature_2m_min"
-    "&timezone=auto&forecast_days=2",
+    "&daily=precipitation_probability_max,temperature_2m_min,temperature_2m_max,weathercode"
+    "&timezone=auto&forecast_days=5",
     boardConfig.latitude, boardConfig.longitude);
 
   Serial.printf("[WEATHER] Fetching: %s\n", url);
@@ -379,27 +380,29 @@ void fetchWeather() {
   String body = https.getString();
   https.end();
 
-  DynamicJsonDocument doc(2048);
+  DynamicJsonDocument doc(3072);
   DeserializationError err = deserializeJson(doc, body);
-
   if (err) {
     Serial.printf("[WEATHER] JSON parse error: %s\n", err.c_str());
     return;
   }
 
   xSemaphoreTake(weatherMutex, portMAX_DELAY);
-  weatherCache.currentTemp      = doc["current"]["temperature_2m"]                 | 0.0f;
-  weatherCache.weatherCode      = doc["current"]["weathercode"]                    | 0;
-  weatherCache.rainProbToday    = doc["daily"]["precipitation_probability_max"][0] | 0;
-  weatherCache.rainProbTomorrow = doc["daily"]["precipitation_probability_max"][1] | 0;
-  weatherCache.minTempToday     = doc["daily"]["temperature_2m_min"][0]            | 0.0f;
-  weatherCache.valid            = true;
-  weatherCache.fetchedAt        = millis();
+  weatherCache.currentTemp = doc["current"]["temperature_2m"] | 0.0f;
+  weatherCache.currentCode = doc["current"]["weathercode"]    | 0;
+  for (int i = 0; i < 5; i++) {
+    weatherCache.rainProb[i] = doc["daily"]["precipitation_probability_max"][i] | 0;
+    weatherCache.loTemps[i]  = doc["daily"]["temperature_2m_min"][i]            | 0.0f;
+    weatherCache.hiTemps[i]  = doc["daily"]["temperature_2m_max"][i]            | 0.0f;
+    weatherCache.codes[i]    = doc["daily"]["weathercode"][i]                   | 0;
+  }
+  weatherCache.valid     = true;
+  weatherCache.fetchedAt = millis();
   xSemaphoreGive(weatherMutex);
 
-  Serial.printf("[WEATHER] Temp: %.1f°C  Rain today: %d%%  Rain tomorrow: %d%%  Min: %.1f°C\n",
-    weatherCache.currentTemp, weatherCache.rainProbToday,
-    weatherCache.rainProbTomorrow, weatherCache.minTempToday);
+  Serial.printf("[WEATHER] Temp: %.1f°C  Rain today: %d%%  Rain tomorrow: %d%%  Lo: %.1f°C  Hi: %.1f°C\n",
+    weatherCache.currentTemp, weatherCache.rainProb[0],
+    weatherCache.rainProb[1], weatherCache.loTemps[0], weatherCache.hiTemps[0]);
 }
 
 // Returns a skip reason string, or nullptr if no skip needed
@@ -407,15 +410,14 @@ const char* shouldSkipForWeather() {
   if (!boardConfig.weatherEnabled) return nullptr;
 
   xSemaphoreTake(weatherMutex, portMAX_DELAY);
-  bool  valid         = weatherCache.valid;
-  int   rainToday     = weatherCache.rainProbToday;
-  int   rainTomorrow  = weatherCache.rainProbTomorrow;
-  float minTemp       = weatherCache.minTempToday;
+  bool  valid      = weatherCache.valid;
+  int   rainToday  = weatherCache.rainProb[0];
+  int   rainTomrw  = weatherCache.rainProb[1];
+  float minTemp    = weatherCache.loTemps[0];
   xSemaphoreGive(weatherMutex);
 
-  if (!valid) return nullptr; // no data — don't skip
-
-  if (rainToday >= boardConfig.rainThreshold || rainTomorrow >= boardConfig.rainThreshold)
+  if (!valid) return nullptr;
+  if (rainToday >= boardConfig.rainThreshold || rainTomrw >= boardConfig.rainThreshold)
     return "rain forecast";
   if (minTemp <= boardConfig.freezeThreshold)
     return "freeze risk";
@@ -426,7 +428,8 @@ void weatherTask(void* param) {
   vTaskDelay(pdMS_TO_TICKS(5000)); // wait 5s for WiFi/NTP to settle
   fetchWeather();
   while (true) {
-    vTaskDelay(pdMS_TO_TICKS(3600000)); // fetch every hour
+    // Block up to 1 hour; POST /api/config wakes us early via xTaskNotify
+    ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(3600000));
     fetchWeather();
   }
 }
@@ -704,12 +707,12 @@ void scheduleCheckerTask(void* param) {
       const char* skipReason = shouldSkipForWeather();
       if (skipReason) {
         xSemaphoreTake(weatherMutex, portMAX_DELAY);
-        int   rainToday    = weatherCache.rainProbToday;
-        int   rainTomorrow = weatherCache.rainProbTomorrow;
-        float minTemp      = weatherCache.minTempToday;
+        int   rainToday  = weatherCache.rainProb[0];
+        int   rainTomrw  = weatherCache.rainProb[1];
+        float minTemp    = weatherCache.loTemps[0];
         xSemaphoreGive(weatherMutex);
         Serial.printf("[SCHED] Run SKIPPED — %s (rain today: %d%%, rain tomorrow: %d%%, min: %.1f°C)\n",
-          skipReason, rainToday, rainTomorrow, minTemp);
+          skipReason, rainToday, rainTomrw, minTemp);
       } else {
         Serial.printf("[SCHED] Scheduled run: %s %02d:%02d\n",
           (const char*[]){"Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"}[dayIndex],
@@ -1005,19 +1008,28 @@ void setupRoutes() {
 
   // ── GET /api/weather ──────────────────────────────────────────
   server.on("/api/weather", HTTP_GET, []() {
-    DynamicJsonDocument doc(512);
+    DynamicJsonDocument doc(1024);
     xSemaphoreTake(weatherMutex, portMAX_DELAY);
     doc["valid"]              = weatherCache.valid;
     doc["current_temp"]       = weatherCache.currentTemp;
-    doc["min_temp_today"]     = weatherCache.minTempToday;
-    doc["rain_prob_today"]    = weatherCache.rainProbToday;
-    doc["rain_prob_tomorrow"] = weatherCache.rainProbTomorrow;
-    doc["weather_code"]       = weatherCache.weatherCode;
+    doc["weather_code"]       = weatherCache.currentCode;
+    doc["min_temp_today"]     = weatherCache.loTemps[0];
+    doc["rain_prob_today"]    = weatherCache.rainProb[0];
+    doc["rain_prob_tomorrow"] = weatherCache.rainProb[1];
     doc["fetched_ago_sec"]    = weatherCache.valid ? (long)((millis() - weatherCache.fetchedAt) / 1000) : -1;
+    JsonArray forecast = doc.createNestedArray("forecast");
+    for (int i = 0; i < 5; i++) {
+      JsonObject day = forecast.createNestedObject();
+      day["hi"]   = weatherCache.hiTemps[i];
+      day["lo"]   = weatherCache.loTemps[i];
+      day["rain"] = weatherCache.rainProb[i];
+      day["code"] = weatherCache.codes[i];
+    }
     xSemaphoreGive(weatherMutex);
-    doc["weather_enabled"]    = boardConfig.weatherEnabled;
-    doc["rain_threshold"]     = boardConfig.rainThreshold;
-    doc["freeze_threshold"]   = boardConfig.freezeThreshold;
+    doc["weather_enabled"]  = boardConfig.weatherEnabled;
+    doc["rain_threshold"]   = boardConfig.rainThreshold;
+    doc["freeze_threshold"] = boardConfig.freezeThreshold;
+    doc["temp_unit"]        = boardConfig.tempUnit;
     String out; serializeJson(doc, out);
     server.send(200, "application/json", out);
   });
