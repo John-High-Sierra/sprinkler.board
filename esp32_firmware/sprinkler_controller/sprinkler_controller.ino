@@ -146,6 +146,7 @@ struct BoardConfig {
   float freezeThreshold; // degrees C, skip if min temp <= this
   bool cycleAndSoakEnabled;
   int  cycleTime;            // minutes per cycle, default 4
+  char tempUnit[2];          // "C" or "F", display preference only
 };
 BoardConfig boardConfig;
 
@@ -160,6 +161,7 @@ struct WeatherCache {
 };
 WeatherCache weatherCache = {0, 0, 0, 0, 0, false, 0};
 SemaphoreHandle_t weatherMutex;
+TaskHandle_t      weatherTaskHandle = NULL;
 
 // ── NTP sync helper ──────────────────────────────────────────
 bool isNtpSynced() {
@@ -297,6 +299,7 @@ void loadConfig() {
   boardConfig.freezeThreshold     = 2.0f;
   boardConfig.cycleAndSoakEnabled = false;
   boardConfig.cycleTime           = 4;
+  strlcpy(boardConfig.tempUnit, "C", sizeof(boardConfig.tempUnit));
 
   if (!LittleFS.exists(CONFIG_FILE)) return;
   File f = LittleFS.open(CONFIG_FILE, "r");
@@ -317,6 +320,8 @@ void loadConfig() {
   boardConfig.freezeThreshold     = doc["freeze_threshold"]      | 2.0f;
   boardConfig.cycleAndSoakEnabled = doc["cycle_and_soak_enabled"]| false;
   boardConfig.cycleTime           = doc["cycle_time"]            | 4;
+  const char* tu = doc["temp_unit"] | "C";
+  strlcpy(boardConfig.tempUnit, (tu[0]=='F' ? "F" : "C"), sizeof(boardConfig.tempUnit));
   Serial.printf("[CFG] Timezone: %s  Lat: %.4f  Lon: %.4f  WeatherSkip: %s\n",
     boardConfig.timezone, boardConfig.latitude, boardConfig.longitude,
     boardConfig.weatherEnabled ? "ON" : "OFF");
@@ -332,6 +337,7 @@ void saveConfig() {
   doc["freeze_threshold"]     = boardConfig.freezeThreshold;
   doc["cycle_and_soak_enabled"] = boardConfig.cycleAndSoakEnabled;
   doc["cycle_time"]             = boardConfig.cycleTime;
+  doc["temp_unit"]              = boardConfig.tempUnit;
   File f = LittleFS.open(CONFIG_FILE, "w");
   if (!f) return;
   serializeJson(doc, f);
@@ -952,6 +958,7 @@ void setupRoutes() {
     doc["freeze_threshold"]       = boardConfig.freezeThreshold;
     doc["cycle_and_soak_enabled"] = boardConfig.cycleAndSoakEnabled;
     doc["cycle_time"]             = boardConfig.cycleTime;
+    doc["temp_unit"]              = boardConfig.tempUnit;
     String out; serializeJson(doc, out);
     server.send(200, "application/json", out);
   });
@@ -978,7 +985,16 @@ void setupRoutes() {
     if (doc.containsKey("freeze_threshold"))      boardConfig.freezeThreshold     = doc["freeze_threshold"].as<float>();
     if (doc.containsKey("cycle_and_soak_enabled")) boardConfig.cycleAndSoakEnabled = doc["cycle_and_soak_enabled"].as<bool>();
     if (doc.containsKey("cycle_time"))            boardConfig.cycleTime           = doc["cycle_time"].as<int>();
+    if (doc.containsKey("temp_unit")) {
+      const char* tu = doc["temp_unit"].as<const char*>();
+      if (tu) strlcpy(boardConfig.tempUnit, (tu[0]=='F' ? "F" : "C"), sizeof(boardConfig.tempUnit));
+    }
+    // Notify weatherTask to refetch immediately when location or skip toggle changes
+    bool locationChanged = doc.containsKey("latitude") || doc.containsKey("longitude") || doc.containsKey("weather_enabled");
     saveConfig();
+    if (locationChanged && weatherTaskHandle) {
+      xTaskNotify(weatherTaskHandle, 0, eNoAction);
+    }
     server.send(200, "application/json", "{\"message\":\"Config saved\"}");
   });
 
@@ -1448,7 +1464,7 @@ void setup() {
   // Background tasks
   xTaskCreate(scheduleCheckerTask, "sched_check", 4096, NULL, 1, NULL);
   xTaskCreate(ledTask,             "led_blink",   1024, NULL, 1, NULL);
-  xTaskCreate(weatherTask,         "weather",     8192, NULL, 1, NULL);
+  xTaskCreate(weatherTask,         "weather",     8192, NULL, 1, &weatherTaskHandle);
 
   Serial.println("[BOOT] All systems GO");
 }
