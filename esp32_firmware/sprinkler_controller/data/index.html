@@ -486,8 +486,15 @@ select:focus, input[type="number"]:focus { outline: none; border-color: #4fc3f7;
   <div id="wx-page-content" style="display:none">
     <div class="wx-hero">
       <div class="wx-hero-icon" id="wxp-icon">🌤</div>
-      <div class="wx-hero-temp" id="wxp-temp">--°C</div>
+      <div class="wx-hero-temp" id="wxp-temp">--°</div>
       <div class="wx-hero-desc" id="wxp-desc">--</div>
+    </div>
+    <div class="wx-unit-row">
+      <div class="unit-toggle">
+        <div class="unit-slider" id="wx-unit-slider"></div>
+        <button class="unit-btn active" id="wx-btn-c" onclick="setTempUnit('C')">°C</button>
+        <button class="unit-btn"        id="wx-btn-f" onclick="setTempUnit('F')">°F</button>
+      </div>
     </div>
     <div class="wx-grid">
       <div class="wx-card" id="wxp-rain-today-card">
@@ -515,6 +522,8 @@ select:focus, input[type="number"]:focus { outline: none; border-color: #4fc3f7;
       <div class="wx-skip-label" id="wxp-skip-label">Weather Skip</div>
       <div class="wx-skip-reason" id="wxp-skip-reason">--</div>
     </div>
+    <div class="wx-forecast-hdr">5-Day Forecast</div>
+    <div class="forecast-strip" id="wxp-forecast-strip"></div>
   </div>
 </div>
 
@@ -1138,6 +1147,8 @@ async function updateWeatherPage() {
     const ageMin = Math.round(w.fetched_ago_sec / 60);
     document.getElementById('wxp-age').textContent = ageMin < 2 ? 'Just now' : `${ageMin}m ago`;
 
+    renderForecastStrip(w.forecast);
+
     // Skip status box
     const box    = document.getElementById('wxp-skip-box');
     const lbl    = document.getElementById('wxp-skip-label');
@@ -1166,6 +1177,96 @@ async function updateWeatherPage() {
   } catch(e) {}
 }
 
+// ── Unit toggle ────────────────────────────────────────
+function syncUnitToggle() {
+  const btnC   = document.getElementById('wx-btn-c');
+  const btnF   = document.getElementById('wx-btn-f');
+  const slider = document.getElementById('wx-unit-slider');
+  if (!btnC || !btnF || !slider) return;
+  btnC.classList.toggle('active', wxTempUnit === 'C');
+  btnF.classList.toggle('active', wxTempUnit === 'F');
+  slider.style.width     = (wxTempUnit === 'C' ? btnC : btnF).offsetWidth + 'px';
+  slider.style.transform = wxTempUnit === 'C' ? 'translateX(0)' : `translateX(${btnC.offsetWidth}px)`;
+}
+
+async function setTempUnit(u) {
+  wxTempUnit = u;
+  syncUnitToggle();
+  // update freeze threshold label in settings if visible
+  const lbl = document.getElementById('freeze-unit-lbl');
+  if (lbl) lbl.textContent = '°' + u;
+  await POST('/api/config', { temp_unit: u });
+  updateWeatherPage();
+  updateWeatherWidget();
+}
+
+// ── 5-Day forecast strip ───────────────────────────────
+function tempColor(c) {
+  // 5°C (ice blue) → 35°C (amber)
+  const t = Math.max(0, Math.min(1, (c - 5) / 30));
+  const lerpHex = (a, b, t) => {
+    const ah = parseInt(a.slice(1),16), bh = parseInt(b.slice(1),16);
+    const r = Math.round(((ah>>16)&0xff) + (((bh>>16)&0xff)-((ah>>16)&0xff))*t);
+    const g = Math.round(((ah>>8)&0xff)  + (((bh>>8)&0xff) -((ah>>8)&0xff))*t);
+    const bl= Math.round((ah&0xff)       + ((bh&0xff)       -(ah&0xff))*t);
+    return `#${((r<<16)|(g<<8)|bl).toString(16).padStart(6,'0')}`;
+  };
+  return t < 0.5 ? lerpHex('#4fc3f7','#ffca28',t*2) : lerpHex('#ffca28','#ef6c00',(t-0.5)*2);
+}
+
+function rainColor(pct) {
+  if (pct < 20)  return '#4fc3f7';
+  if (pct < 50)  return '#1e88e5';
+  if (pct < 70)  return '#1565c0';
+  return '#0d47a1';
+}
+
+const DAY_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+
+function renderForecastStrip(forecast) {
+  const strip = document.getElementById('wxp-forecast-strip');
+  if (!strip || !forecast || !forecast.length) return;
+
+  // Get absolute temp range across all days for bar sizing
+  const allHi = forecast.map(d => d.hi);
+  const allLo = forecast.map(d => d.lo);
+  const absMin = Math.min(...allLo) - 2;
+  const absMax = Math.max(...allHi) + 2;
+  const span   = absMax - absMin || 1;
+
+  const now    = new Date();
+  strip.innerHTML = '';
+
+  forecast.forEach((d, i) => {
+    const dayDate  = new Date(now); dayDate.setDate(now.getDate() + i);
+    const dayLabel = i === 0 ? 'Today' : DAY_NAMES[dayDate.getDay()];
+    const hiC      = wxTempUnit === 'F' ? Math.round(d.hi * 9/5 + 32) : Math.round(d.hi);
+    const loC      = wxTempUnit === 'F' ? Math.round(d.lo * 9/5 + 32) : Math.round(d.lo);
+    const hiColor  = tempColor(d.hi);
+    const loColor  = tempColor(d.lo);
+    const rColor   = rainColor(d.rain);
+    const barLeft  = ((d.lo - absMin) / span * 100).toFixed(1);
+    const barWidth = ((d.hi - d.lo)   / span * 100).toFixed(1);
+    const icon     = WX_ICONS[d.code] || '🌡';
+
+    const card = document.createElement('div');
+    card.className = 'fc-card' + (i === 0 ? ' fc-today' : '');
+    card.innerHTML = `
+      <div class="fc-day">${dayLabel}</div>
+      <div class="fc-icon">${icon}</div>
+      <div class="fc-hi" style="color:${hiColor}">${hiC}°</div>
+      <div class="fc-lo" style="color:${loColor}">${loC}°</div>
+      <div class="fc-bar-track">
+        <div class="fc-bar-fill" style="margin-left:${barLeft}%;width:${barWidth}%;background:linear-gradient(90deg,${loColor},${hiColor})"></div>
+      </div>
+      <div class="fc-rain">
+        <span class="fc-rain-pct" style="color:${rColor}">${d.rain}%</span>
+        <div class="fc-rain-track"><div class="fc-rain-fill" style="width:${d.rain}%;background:${rColor}"></div></div>
+      </div>`;
+    strip.appendChild(card);
+  });
+}
+
 function refreshWeatherPage() { updateWeatherPage(); updateWeatherWidget(); }
 
 // ── Boot ───────────────────────────────────────────────
@@ -1178,6 +1279,7 @@ setInterval(pollStatus, 2000);
 setInterval(pollInfo, 15000);
 updateWeatherWidget();
 setInterval(updateWeatherWidget, 300000); // refresh every 5 minutes
+syncUnitToggle();
 </script>
 </body>
 </html>
