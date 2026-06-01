@@ -147,6 +147,7 @@ struct BoardConfig {
   bool cycleAndSoakEnabled;
   int  cycleTime;            // minutes per cycle, default 4
   char tempUnit[2];          // "C" or "F", display preference only
+  char zoneNames[8][32];     // user-defined zone names
 };
 BoardConfig boardConfig;
 
@@ -301,11 +302,14 @@ void loadConfig() {
   boardConfig.cycleAndSoakEnabled = false;
   boardConfig.cycleTime           = 4;
   strlcpy(boardConfig.tempUnit, "C", sizeof(boardConfig.tempUnit));
+  for (int i = 0; i < 8; i++) {
+    snprintf(boardConfig.zoneNames[i], sizeof(boardConfig.zoneNames[i]), "Zone %d", i + 1);
+  }
 
   if (!LittleFS.exists(CONFIG_FILE)) return;
   File f = LittleFS.open(CONFIG_FILE, "r");
   if (!f) return;
-  DynamicJsonDocument doc(512);
+  DynamicJsonDocument doc(1024);
   DeserializationError err = deserializeJson(doc, f);
   f.close();
   if (err) {
@@ -323,13 +327,20 @@ void loadConfig() {
   boardConfig.cycleTime           = doc["cycle_time"]            | 4;
   const char* tu = doc["temp_unit"] | "C";
   strlcpy(boardConfig.tempUnit, (tu[0]=='F' ? "F" : "C"), sizeof(boardConfig.tempUnit));
+  if (doc.containsKey("zone_names")) {
+    JsonArray zn = doc["zone_names"].as<JsonArray>();
+    for (int i = 0; i < 8 && i < (int)zn.size(); i++) {
+      const char* n = zn[i];
+      if (n) strlcpy(boardConfig.zoneNames[i], n, sizeof(boardConfig.zoneNames[i]));
+    }
+  }
   Serial.printf("[CFG] Timezone: %s  Lat: %.4f  Lon: %.4f  WeatherSkip: %s\n",
     boardConfig.timezone, boardConfig.latitude, boardConfig.longitude,
     boardConfig.weatherEnabled ? "ON" : "OFF");
 }
 
 void saveConfig() {
-  DynamicJsonDocument doc(512);
+  DynamicJsonDocument doc(1024);
   doc["timezone"]             = boardConfig.timezone;
   doc["latitude"]             = boardConfig.latitude;
   doc["longitude"]            = boardConfig.longitude;
@@ -339,6 +350,8 @@ void saveConfig() {
   doc["cycle_and_soak_enabled"] = boardConfig.cycleAndSoakEnabled;
   doc["cycle_time"]             = boardConfig.cycleTime;
   doc["temp_unit"]              = boardConfig.tempUnit;
+  JsonArray zn = doc.createNestedArray("zone_names");
+  for (int i = 0; i < 8; i++) zn.add(boardConfig.zoneNames[i]);
   File f = LittleFS.open(CONFIG_FILE, "w");
   if (!f) return;
   serializeJson(doc, f);
@@ -952,7 +965,7 @@ void setupRoutes() {
 
   // ── GET /api/config ───────────────────────────────────────────
   server.on("/api/config", HTTP_GET, []() {
-    DynamicJsonDocument doc(768);
+    DynamicJsonDocument doc(1024);
     doc["timezone"]               = boardConfig.timezone;
     doc["latitude"]               = boardConfig.latitude;
     doc["longitude"]              = boardConfig.longitude;
@@ -962,6 +975,7 @@ void setupRoutes() {
     doc["cycle_and_soak_enabled"] = boardConfig.cycleAndSoakEnabled;
     doc["cycle_time"]             = boardConfig.cycleTime;
     doc["temp_unit"]              = boardConfig.tempUnit;
+    { JsonArray zn = doc.createNestedArray("zone_names"); for (int i = 0; i < 8; i++) zn.add(boardConfig.zoneNames[i]); }
     String out; serializeJson(doc, out);
     server.send(200, "application/json", out);
   });
@@ -969,7 +983,7 @@ void setupRoutes() {
   // ── POST /api/config  body: {"timezone":"EST5EDT,M3.2.0,M11.1.0"} ──
   server.on("/api/config", HTTP_POST, []() {
     if (!server.hasArg("plain")) { server.send(400, "application/json", "{\"error\":\"No body\"}"); return; }
-    DynamicJsonDocument doc(512);
+    DynamicJsonDocument doc(1024);
     if (deserializeJson(doc, server.arg("plain")) != DeserializationError::Ok) {
       server.send(400, "application/json", "{\"error\":\"Invalid JSON\"}"); return;
     }
@@ -991,6 +1005,13 @@ void setupRoutes() {
     if (doc.containsKey("temp_unit")) {
       const char* tu = doc["temp_unit"].as<const char*>();
       if (tu) strlcpy(boardConfig.tempUnit, (tu[0]=='F' ? "F" : "C"), sizeof(boardConfig.tempUnit));
+    }
+    if (doc.containsKey("zone_names")) {
+      JsonArray zn = doc["zone_names"].as<JsonArray>();
+      for (int i = 0; i < 8 && i < (int)zn.size(); i++) {
+        const char* n = zn[i].as<const char*>();
+        if (n) strlcpy(boardConfig.zoneNames[i], n, sizeof(boardConfig.zoneNames[i]));
+      }
     }
     // Notify weatherTask to refetch immediately when location or skip toggle changes
     bool locationChanged = doc.containsKey("latitude") || doc.containsKey("longitude") || doc.containsKey("weather_enabled");
