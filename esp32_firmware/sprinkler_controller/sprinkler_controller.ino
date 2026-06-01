@@ -88,6 +88,8 @@ const int RELAY_PINS[8] = {32, 33, 25, 26, 27, 14, 12, 13};
 // Cloud update URLs — point these at your GitHub repo
 #define CLOUD_FW_URL  "https://github.com/John-High-Sierra/sprinkler.board/releases/latest/download/sprinkler_controller.bin"
 #define CONFIG_FILE    "/config.json"
+#define RUN_LOG_FILE   "/runs.json"
+#define RUN_LOG_MAX    60
 #define DEFAULT_TZ     "UTC0"   // Overridden by config.json saved via Settings page
 
 // ═══════════════════════════════════════════════════════════════
@@ -357,6 +359,47 @@ void saveConfig() {
   serializeJson(doc, f);
   f.close();
   Serial.printf("[CFG] Config saved\n");
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  RUN LOG (LittleFS /runs.json)
+// ═══════════════════════════════════════════════════════════════
+void appendRunLog(time_t ts, const char* trigger, int zoneIdxs[], int zoneSecs[], int count, const char* skipReason) {
+  if (count == 0 && skipReason == nullptr) return;
+
+  DynamicJsonDocument doc(8192);
+
+  if (LittleFS.exists(RUN_LOG_FILE)) {
+    File f = LittleFS.open(RUN_LOG_FILE, "r");
+    if (f) {
+      DeserializationError err = deserializeJson(doc, f);
+      f.close();
+      if (err || !doc.is<JsonArray>()) doc.to<JsonArray>();
+    }
+  } else {
+    doc.to<JsonArray>();
+  }
+
+  JsonArray arr = doc.as<JsonArray>();
+  JsonObject entry = arr.createNestedObject();
+  entry["ts"]      = (long)ts;
+  entry["trigger"] = trigger;
+  JsonArray zones  = entry.createNestedArray("zones");
+  for (int i = 0; i < count; i++) {
+    JsonObject z = zones.createNestedObject();
+    z["z"]    = zoneIdxs[i];
+    z["name"] = boardConfig.zoneNames[zoneIdxs[i]];
+    z["sec"]  = zoneSecs[i];
+  }
+  if (skipReason) entry["skip"] = skipReason;
+  else            entry["skip"] = nullptr;
+
+  while ((int)arr.size() > RUN_LOG_MAX) arr.remove(0);
+
+  File f = LittleFS.open(RUN_LOG_FILE, "w");
+  if (f) { serializeJson(doc, f); f.close(); }
+  Serial.printf("[LOG] Run logged: trigger=%s zones=%d skip=%s\n",
+    trigger, count, skipReason ? skipReason : "none");
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1053,6 +1096,18 @@ void setupRoutes() {
     doc["temp_unit"]        = boardConfig.tempUnit;
     String out; serializeJson(doc, out);
     server.send(200, "application/json", out);
+  });
+
+  // ── GET /api/history ─────────────────────────────────────────
+  server.on("/api/history", HTTP_GET, []() {
+    if (!LittleFS.exists(RUN_LOG_FILE)) {
+      server.send(200, "application/json", "[]");
+      return;
+    }
+    File f = LittleFS.open(RUN_LOG_FILE, "r");
+    if (!f) { server.send(200, "application/json", "[]"); return; }
+    server.streamFile(f, "application/json");
+    f.close();
   });
 
   // ── POST /api/relay_test  body: {"zone": 0-7, "state": 0|1} ──
