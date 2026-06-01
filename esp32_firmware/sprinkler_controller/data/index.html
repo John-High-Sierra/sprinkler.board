@@ -193,6 +193,19 @@ select:focus, input[type="number"]:focus { outline: none; border-color: #4fc3f7;
 .fc-rain-track { flex:1; height:2px; background:rgba(79,195,247,0.12); border-radius:1px; overflow:hidden; }
 .fc-rain-fill { height:100%; border-radius:1px; }
 
+/* ── History page ───────────────────────────────────── */
+#hist-cards { padding: 0 0 80px; }
+.hist-card { background:#131f2e; border:1px solid #1a3a5c; border-radius:10px; padding:10px 12px; margin-bottom:8px; }
+.hist-day { font-size:0.95rem; font-weight:700; color:#e0e8f0; }
+.hist-date { font-size:0.75rem; color:#4fc3f7; margin-top:1px; }
+.hist-skip-txt { font-size:0.78rem; color:#ffb74d; margin-top:4px; }
+.hist-norun { font-size:0.75rem; color:#2a4060; font-style:italic; margin-top:4px; }
+.hist-zone-row { display:flex; align-items:center; gap:8px; margin-top:5px; }
+.hist-zone-name { font-size:0.72rem; color:#607080; width:80px; flex-shrink:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.hist-bar-track { flex:1; background:#0a1520; border-radius:3px; height:16px; overflow:hidden; }
+.hist-bar-fill { height:100%; border-radius:3px; display:flex; align-items:center; padding-left:6px; }
+.hist-bar-label { font-size:0.62rem; font-weight:700; color:#0d1b2a; white-space:nowrap; }
+
 /* ── Toast ────────────────────────────────────────────── */
 #toasts { position: fixed; bottom: 80px; right: 12px; display: flex; flex-direction: column; gap: 7px; z-index: 999; pointer-events: none; }
 .toast { padding: 13px 18px; border-radius: 10px; font-size: 1.05rem; font-weight: 600; animation: tin .3s ease, tout .3s ease 2.7s forwards; max-width: 280px; }
@@ -527,6 +540,11 @@ select:focus, input[type="number"]:focus { outline: none; border-color: #4fc3f7;
   </div>
 </div>
 
+<div class="page" id="page-history">
+  <div class="sec-hdr"><span class="sec-title">Run History</span></div>
+  <div id="hist-cards"></div>
+</div>
+
 <nav class="bottom-nav">
   <button class="nav-btn active" onclick="showPage('schedule',this)">
     <span class="nav-icon">📅</span><span class="nav-label">Schedule</span>
@@ -536,6 +554,9 @@ select:focus, input[type="number"]:focus { outline: none; border-color: #4fc3f7;
   </button>
   <button class="nav-btn" onclick="showPage('weather',this)">
     <span class="nav-icon">🌤</span><span class="nav-label">Weather</span>
+  </button>
+  <button class="nav-btn" onclick="showPage('history',this)">
+    <span class="nav-icon">📋</span><span class="nav-label">History</span>
   </button>
   <button class="nav-btn" onclick="showPage('settings',this)">
     <span class="nav-icon">⚙️</span><span class="nav-label">Settings</span>
@@ -626,6 +647,7 @@ function showPage(pg, el) {
   if (pg==='status')   pollInfo();
   if (pg==='settings') { renderZoneNameSettings(); loadTz(); loadWeatherSettings(); loadCycleAndSoak(); pollInfo(); }
   if (pg==='weather')  updateWeatherPage();
+  if (pg==='history')  loadHistoryPage();
 }
 
 // ── Running banner ─────────────────────────────────────
@@ -1269,6 +1291,59 @@ function renderForecastStrip(forecast) {
       </div>`;
     strip.appendChild(card);
   });
+}
+
+// ── History ────────────────────────────────────────────
+async function loadHistoryPage() {
+  const container = document.getElementById('hist-cards');
+  if (!container) return;
+  container.innerHTML = '<div style="text-align:center;padding:40px;color:#607080">Loading…</div>';
+  try {
+    const entries = await GET('/api/history');
+    if (!Array.isArray(entries) || !entries.length) {
+      container.innerHTML = '<div style="text-align:center;padding:40px;color:#607080">No runs recorded yet.</div>';
+      return;
+    }
+    const reversed = [...entries].reverse();
+    let maxSec = 1;
+    reversed.forEach(e => { if (e.zones) e.zones.forEach(z => { if (z.sec > maxSec) maxSec = z.sec; }); });
+    const DAY_NAMES = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+    container.innerHTML = reversed.map(e => {
+      const d       = new Date(e.ts * 1000);
+      const dayName = DAY_NAMES[d.getDay()];
+      const dateStr = d.toLocaleDateString('en-US', {month:'long', day:'numeric', year:'numeric'});
+      const manual  = e.trigger === 'manual';
+      let inner = '';
+      if (e.skip) {
+        inner = `<div class="hist-skip-txt">⚠ Skipped — ${e.skip}</div>
+                 <div class="hist-norun">No watering</div>`;
+      } else if (!e.zones || !e.zones.length) {
+        inner = '<div class="hist-norun">No schedule</div>';
+      } else {
+        inner = e.zones.map(z => {
+          const min = Math.round(z.sec / 60);
+          if (min === 0) return '';
+          const pct   = Math.max(4, Math.round(z.sec / maxSec * 100));
+          const color = manual ? '#81c784' : '#4fc3f7';
+          return `<div class="hist-zone-row">
+            <span class="hist-zone-name">${z.name}</span>
+            <div class="hist-bar-track">
+              <div class="hist-bar-fill" style="width:${pct}%;background:${color}">
+                <span class="hist-bar-label">${min} min</span>
+              </div>
+            </div>
+          </div>`;
+        }).join('');
+      }
+      return `<div class="hist-card">
+        <div class="hist-day">${dayName}</div>
+        <div class="hist-date">${dateStr}${manual ? ' · manual run' : ''}</div>
+        ${inner}
+      </div>`;
+    }).join('');
+  } catch(e) {
+    container.innerHTML = '<div style="text-align:center;padding:40px;color:#607080">Could not load history.</div>';
+  }
 }
 
 function refreshWeatherPage() { updateWeatherPage(); updateWeatherWidget(); }
