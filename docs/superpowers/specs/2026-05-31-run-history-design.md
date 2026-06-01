@@ -29,6 +29,8 @@ A scrollable list of daily run cards, most recent first. Each card shows:
 
 Bar widths are relative: the zone with the longest total runtime across the entire dataset gets 100% width; all others scale proportionally. Duration is displayed in minutes (`Math.round(sec / 60) + ' min'`). Runs of 0 seconds are not rendered.
 
+Zone labels are resolved via the existing `getNames()` helper (reads `localStorage['znames']`), so user-defined zone names ("Front Lawn", "Back Beds", etc.) appear in the cards automatically. The log stores zone indices only.
+
 `loadHistoryPage()` is called once when the History tab is first tapped, and re-called each time the tab is re-opened to pick up new runs.
 
 ---
@@ -115,7 +117,7 @@ void appendRunLog(time_t ts, const char* trigger, int zones[], int durations[], 
 
 ## Out of Scope
 
-- Zone naming (zones are numbered 1–8)
+- Zone naming in the log (names resolved from localStorage at display time, not stored in the log)
 - Editing or deleting log entries
 - Exporting history
 - History retention longer than 60 days
