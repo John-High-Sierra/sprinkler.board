@@ -1,5 +1,6 @@
 # Claude Code internal
 .claude/
+.superpowers/
 
 # Python
 sprinkler_controller/venv/
