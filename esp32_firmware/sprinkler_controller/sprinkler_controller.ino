@@ -514,6 +514,7 @@ void runSequenceTask(void* param) {
   xSemaphoreGive(scheduleMutex);
 
   stopRequested = false;
+  int actualSecs[NUM_ZONES] = {0};
 
   if (boardConfig.cycleAndSoakEnabled) {
     // ── Cycle & Soak mode ────────────────────────────────
@@ -579,6 +580,9 @@ void runSequenceTask(void* param) {
         }
       }
     }
+    for (int z = 0; z < NUM_ZONES; z++) {
+      actualSecs[z] = daySched.durations[z] * 60 - remaining[z];
+    }
 
   } else {
     // ── Standard sequential mode ─────────────────────────
@@ -615,6 +619,7 @@ void runSequenceTask(void* param) {
       }
 
       RELAY_OFF(RELAY_PINS[z]);
+      actualSecs[z] = durMin * 60 - rem;
       Serial.printf("[RUN] Zone %d OFF\n", z + 1);
       if (stopRequested) break;
     }
@@ -631,6 +636,14 @@ void runSequenceTask(void* param) {
   xSemaphoreGive(statusMutex);
 
   Serial.println("[RUN] Sequence complete");
+  {
+    time_t ts = time(nullptr);
+    int logZ[NUM_ZONES], logS[NUM_ZONES], logCount = 0;
+    for (int z = 0; z < NUM_ZONES; z++) {
+      if (actualSecs[z] > 0) { logZ[logCount] = z; logS[logCount] = actualSecs[z]; logCount++; }
+    }
+    appendRunLog(ts, manual ? "manual" : "schedule", logZ, logS, logCount, nullptr);
+  }
   vTaskDelete(NULL);
 }
 
@@ -641,6 +654,7 @@ void runSingleZoneTask(void* p) {
   delete a;
 
   stopRequested = false;
+  int actualSec = 0;
 
   if (boardConfig.cycleAndSoakEnabled) {
     int cycleTimeSec   = boardConfig.cycleTime * 60;
@@ -683,6 +697,7 @@ void runSingleZoneTask(void* p) {
         }
       }
     }
+    actualSec = dur * 60 - totalRemaining;
   } else {
     RELAY_ON(RELAY_PINS[z]);
     int remaining = dur * 60;
@@ -698,6 +713,7 @@ void runSingleZoneTask(void* p) {
       remaining--;
     }
     RELAY_OFF(RELAY_PINS[z]);
+    actualSec = dur * 60 - remaining;
   }
 
   allRelaysOff();
@@ -708,6 +724,11 @@ void runSingleZoneTask(void* p) {
   runStatus.remainingTime = 0;
   runStatus.manualRun     = false;
   xSemaphoreGive(statusMutex);
+  if (actualSec > 0) {
+    time_t ts = time(nullptr);
+    int logZ[1] = {z}, logS[1] = {actualSec};
+    appendRunLog(ts, "manual", logZ, logS, 1, nullptr);
+  }
   vTaskDelete(NULL);
 }
 
@@ -769,6 +790,7 @@ void scheduleCheckerTask(void* param) {
         xSemaphoreGive(weatherMutex);
         Serial.printf("[SCHED] Run SKIPPED — %s (rain today: %d%%, rain tomorrow: %d%%, min: %.1f°C)\n",
           skipReason, rainToday, rainTomrw, minTemp);
+        appendRunLog(now, "schedule", nullptr, nullptr, 0, skipReason);
       } else {
         Serial.printf("[SCHED] Scheduled run: %s %02d:%02d\n",
           (const char*[]){"Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"}[dayIndex],
