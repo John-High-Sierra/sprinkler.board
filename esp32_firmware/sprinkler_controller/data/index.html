@@ -567,12 +567,8 @@ function to24(h12, m, ampm) {
   return { hour: h, minute: Math.min(59, Math.max(0, parseInt(m) || 0)) };
 }
 
-// ── Zone names (localStorage) ──────────────────────────
-function getNames() {
-  try { return JSON.parse(localStorage.getItem('znames')) || Array.from({length:ZONES},(_,i)=>`Zone ${i+1}`); }
-  catch { return Array.from({length:ZONES},(_,i)=>`Zone ${i+1}`); }
-}
-function setNames(n) { localStorage.setItem('znames', JSON.stringify(n)); }
+// ── Zone names (loaded from board) ─────────────────────
+let zoneNames = Array.from({length: ZONES}, (_, i) => `Zone ${i+1}`);
 
 // ── Mock data ──────────────────────────────────────────
 let mStat   = {is_running:false,day_index:-1,active_sprinkler:-1,remaining_time:0,manual_run:false};
@@ -642,7 +638,7 @@ function updateBanner(s) {
   const progWrap = document.getElementById('rb-prog-wrap');
   const prog     = document.getElementById('rb-prog');
   const stopBtn  = document.getElementById('rb-stop-btn');
-  const names    = getNames();
+  const names    = zoneNames;
 
   if (s.is_running) {
     const m = Math.floor(s.remaining_time/60);
@@ -679,7 +675,7 @@ async function pollStatus() {
   try {
     const s = await GET('/api/status');
     lastStatus = s;
-    const names = getNames();
+    const names = zoneNames;
 
     // LED + header time
     document.getElementById('led').className = s.is_running ? 'led running' : 'led';
@@ -775,7 +771,7 @@ async function loadSchedule() {
 function renderSchedule() {
   const list = document.getElementById('schedList');
   if (!list || !schedData) return;
-  const names = getNames();
+  const names = zoneNames;
   list.innerHTML = '';
   schedData.forEach((day, d) => {
     const timeDisplay = fmt12(day.hour, day.minute);
@@ -887,13 +883,13 @@ async function saveSchedule() {
 function initManualSelect() {
   const sel = document.getElementById('manualZone');
   if (!sel) return;
-  sel.innerHTML = getNames().map((n,i) => `<option value="${i}">${n}</option>`).join('');
+  sel.innerHTML = zoneNames.map((n,i) => `<option value="${i}">${n}</option>`).join('');
 }
 async function manualRun() {
   const z = parseInt(document.getElementById('manualZone').value);
   const dur = parseInt(document.getElementById('manualDur').value) || 10;
   const r = await POST('/api/run_zone', {zone:z, duration:dur});
-  r.message ? toast(`${getNames()[z]} · ${dur}min`) : toast(r.error||'Failed','err');
+  r.message ? toast(`${zoneNames[z]} · ${dur}min`) : toast(r.error||'Failed','err');
 }
 async function runDaySeq() {
   const d = parseInt(document.getElementById('manualDay').value);
@@ -930,6 +926,12 @@ async function loadTz() {
         }
       }
     }
+    if (r.zone_names && r.zone_names.length) {
+      zoneNames = r.zone_names.slice(0, ZONES);
+      renderZoneNameSettings();
+      initManualSelect();
+      renderSchedule();
+    }
   } catch(e) {}
 }
 async function saveTz() {
@@ -943,17 +945,19 @@ async function saveTz() {
 function renderZoneNameSettings() {
   const list = document.getElementById('zoneNamesList');
   if (!list) return;
-  const names = getNames();
-  list.innerHTML = names.map((n,i) => `
+  list.innerHTML = zoneNames.map((n,i) => `
     <div class="settings-row">
       <span class="settings-label" style="color:#607080">Z${i+1}</span>
       <input class="zname-inp" value="${n}" id="zn${i}" onchange="updateZname(${i},this.value)">
     </div>`).join('');
 }
-function updateZname(i, v) {
-  const n = getNames(); n[i] = v.trim() || `Zone ${i+1}`; setNames(n);
+async function updateZname(i, v) {
+  zoneNames[i] = v.trim() || `Zone ${i+1}`;
+  const inp = document.getElementById(`zn${i}`);
+  if (inp) inp.value = zoneNames[i];
+  await POST('/api/config', { zone_names: zoneNames });
   initManualSelect();
-  renderSchedule(); // refresh zone names in schedule
+  renderSchedule();
   if (lastStatus) highlightRunningZone(lastStatus);
 }
 
@@ -1271,6 +1275,7 @@ function refreshWeatherPage() { updateWeatherPage(); updateWeatherWidget(); }
 
 // ── Boot ───────────────────────────────────────────────
 loadSchedule();
+loadTz();
 initManualSelect();
 pollStatus();
 pollInfo();
