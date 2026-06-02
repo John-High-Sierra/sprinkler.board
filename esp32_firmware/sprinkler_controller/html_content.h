@@ -195,6 +195,19 @@ select:focus, input[type="number"]:focus { outline: none; border-color: #4fc3f7;
 .fc-rain-track { flex:1; height:2px; background:rgba(79,195,247,0.12); border-radius:1px; overflow:hidden; }
 .fc-rain-fill { height:100%; border-radius:1px; }
 
+/* ── History page ───────────────────────────────────── */
+#hist-cards { padding: 0 0 80px; }
+.hist-card { background:#131f2e; border:1px solid #1a3a5c; border-radius:10px; padding:10px 12px; margin-bottom:8px; }
+.hist-day { font-size:0.95rem; font-weight:700; color:#e0e8f0; }
+.hist-date { font-size:0.75rem; color:#4fc3f7; margin-top:1px; }
+.hist-skip-txt { font-size:0.78rem; color:#ffb74d; margin-top:4px; }
+.hist-norun { font-size:0.75rem; color:#2a4060; font-style:italic; margin-top:4px; }
+.hist-zone-row { display:flex; align-items:center; gap:8px; margin-top:5px; }
+.hist-zone-name { font-size:0.72rem; color:#607080; width:80px; flex-shrink:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.hist-bar-track { flex:1; background:#0a1520; border-radius:3px; height:16px; overflow:hidden; }
+.hist-bar-fill { height:100%; border-radius:3px; display:flex; align-items:center; padding-left:6px; }
+.hist-bar-label { font-size:0.62rem; font-weight:700; color:#0d1b2a; white-space:nowrap; }
+
 /* ── Toast ────────────────────────────────────────────── */
 #toasts { position: fixed; bottom: 80px; right: 12px; display: flex; flex-direction: column; gap: 7px; z-index: 999; pointer-events: none; }
 .toast { padding: 13px 18px; border-radius: 10px; font-size: 1.05rem; font-weight: 600; animation: tin .3s ease, tout .3s ease 2.7s forwards; max-width: 280px; }
@@ -529,6 +542,11 @@ select:focus, input[type="number"]:focus { outline: none; border-color: #4fc3f7;
   </div>
 </div>
 
+<div class="page" id="page-history">
+  <div class="sec-hdr"><span class="sec-title">Run History</span></div>
+  <div id="hist-cards"></div>
+</div>
+
 <nav class="bottom-nav">
   <button class="nav-btn active" onclick="showPage('schedule',this)">
     <span class="nav-icon">📅</span><span class="nav-label">Schedule</span>
@@ -538,6 +556,9 @@ select:focus, input[type="number"]:focus { outline: none; border-color: #4fc3f7;
   </button>
   <button class="nav-btn" onclick="showPage('weather',this)">
     <span class="nav-icon">🌤</span><span class="nav-label">Weather</span>
+  </button>
+  <button class="nav-btn" onclick="showPage('history',this)">
+    <span class="nav-icon">📋</span><span class="nav-label">History</span>
   </button>
   <button class="nav-btn" onclick="showPage('settings',this)">
     <span class="nav-icon">⚙️</span><span class="nav-label">Settings</span>
@@ -569,12 +590,8 @@ function to24(h12, m, ampm) {
   return { hour: h, minute: Math.min(59, Math.max(0, parseInt(m) || 0)) };
 }
 
-// ── Zone names (localStorage) ──────────────────────────
-function getNames() {
-  try { return JSON.parse(localStorage.getItem('znames')) || Array.from({length:ZONES},(_,i)=>`Zone ${i+1}`); }
-  catch { return Array.from({length:ZONES},(_,i)=>`Zone ${i+1}`); }
-}
-function setNames(n) { localStorage.setItem('znames', JSON.stringify(n)); }
+// ── Zone names (loaded from board) ─────────────────────
+let zoneNames = Array.from({length: ZONES}, (_, i) => `Zone ${i+1}`);
 
 // ── Mock data ──────────────────────────────────────────
 let mStat   = {is_running:false,day_index:-1,active_sprinkler:-1,remaining_time:0,manual_run:false};
@@ -632,6 +649,7 @@ function showPage(pg, el) {
   if (pg==='status')   pollInfo();
   if (pg==='settings') { renderZoneNameSettings(); loadTz(); loadWeatherSettings(); loadCycleAndSoak(); pollInfo(); }
   if (pg==='weather')  updateWeatherPage();
+  if (pg==='history')  loadHistoryPage();
 }
 
 // ── Running banner ─────────────────────────────────────
@@ -644,7 +662,7 @@ function updateBanner(s) {
   const progWrap = document.getElementById('rb-prog-wrap');
   const prog     = document.getElementById('rb-prog');
   const stopBtn  = document.getElementById('rb-stop-btn');
-  const names    = getNames();
+  const names    = zoneNames;
 
   if (s.is_running) {
     const m = Math.floor(s.remaining_time/60);
@@ -681,7 +699,7 @@ async function pollStatus() {
   try {
     const s = await GET('/api/status');
     lastStatus = s;
-    const names = getNames();
+    const names = zoneNames;
 
     // LED + header time
     document.getElementById('led').className = s.is_running ? 'led running' : 'led';
@@ -777,7 +795,7 @@ async function loadSchedule() {
 function renderSchedule() {
   const list = document.getElementById('schedList');
   if (!list || !schedData) return;
-  const names = getNames();
+  const names = zoneNames;
   list.innerHTML = '';
   schedData.forEach((day, d) => {
     const timeDisplay = fmt12(day.hour, day.minute);
@@ -889,13 +907,13 @@ async function saveSchedule() {
 function initManualSelect() {
   const sel = document.getElementById('manualZone');
   if (!sel) return;
-  sel.innerHTML = getNames().map((n,i) => `<option value="${i}">${n}</option>`).join('');
+  sel.innerHTML = zoneNames.map((n,i) => `<option value="${i}">${n}</option>`).join('');
 }
 async function manualRun() {
   const z = parseInt(document.getElementById('manualZone').value);
   const dur = parseInt(document.getElementById('manualDur').value) || 10;
   const r = await POST('/api/run_zone', {zone:z, duration:dur});
-  r.message ? toast(`${getNames()[z]} · ${dur}min`) : toast(r.error||'Failed','err');
+  r.message ? toast(`${zoneNames[z]} · ${dur}min`) : toast(r.error||'Failed','err');
 }
 async function runDaySeq() {
   const d = parseInt(document.getElementById('manualDay').value);
@@ -932,6 +950,12 @@ async function loadTz() {
         }
       }
     }
+    if (r.zone_names && r.zone_names.length) {
+      zoneNames = r.zone_names.slice(0, ZONES);
+      renderZoneNameSettings();
+      initManualSelect();
+      renderSchedule();
+    }
   } catch(e) {}
 }
 async function saveTz() {
@@ -945,17 +969,19 @@ async function saveTz() {
 function renderZoneNameSettings() {
   const list = document.getElementById('zoneNamesList');
   if (!list) return;
-  const names = getNames();
-  list.innerHTML = names.map((n,i) => `
+  list.innerHTML = zoneNames.map((n,i) => `
     <div class="settings-row">
       <span class="settings-label" style="color:#607080">Z${i+1}</span>
       <input class="zname-inp" value="${n}" id="zn${i}" onchange="updateZname(${i},this.value)">
     </div>`).join('');
 }
-function updateZname(i, v) {
-  const n = getNames(); n[i] = v.trim() || `Zone ${i+1}`; setNames(n);
+async function updateZname(i, v) {
+  zoneNames[i] = v.trim() || `Zone ${i+1}`;
+  const inp = document.getElementById(`zn${i}`);
+  if (inp) inp.value = zoneNames[i];
+  await POST('/api/config', { zone_names: zoneNames });
   initManualSelect();
-  renderSchedule(); // refresh zone names in schedule
+  renderSchedule();
   if (lastStatus) highlightRunningZone(lastStatus);
 }
 
@@ -1269,10 +1295,64 @@ function renderForecastStrip(forecast) {
   });
 }
 
+// ── History ────────────────────────────────────────────
+async function loadHistoryPage() {
+  const container = document.getElementById('hist-cards');
+  if (!container) return;
+  container.innerHTML = '<div style="text-align:center;padding:40px;color:#607080">Loading…</div>';
+  try {
+    const entries = await GET('/api/history');
+    if (!Array.isArray(entries) || !entries.length) {
+      container.innerHTML = '<div style="text-align:center;padding:40px;color:#607080">No runs recorded yet.</div>';
+      return;
+    }
+    const reversed = [...entries].reverse();
+    let maxSec = 1;
+    reversed.forEach(e => { if (e.zones) e.zones.forEach(z => { if (z.sec > maxSec) maxSec = z.sec; }); });
+    const DAY_NAMES = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+    container.innerHTML = reversed.map(e => {
+      const d       = new Date(e.ts * 1000);
+      const dayName = DAY_NAMES[d.getDay()];
+      const dateStr = d.toLocaleDateString('en-US', {month:'long', day:'numeric', year:'numeric'});
+      const manual  = e.trigger === 'manual';
+      let inner = '';
+      if (e.skip) {
+        inner = `<div class="hist-skip-txt">⚠ Skipped — ${e.skip}</div>
+                 <div class="hist-norun">No watering</div>`;
+      } else if (!e.zones || !e.zones.length) {
+        inner = '<div class="hist-norun">No schedule</div>';
+      } else {
+        inner = e.zones.map(z => {
+          const min = Math.round(z.sec / 60);
+          if (min === 0) return '';
+          const pct   = Math.max(4, Math.round(z.sec / maxSec * 100));
+          const color = manual ? '#81c784' : '#4fc3f7';
+          return `<div class="hist-zone-row">
+            <span class="hist-zone-name">${z.name}</span>
+            <div class="hist-bar-track">
+              <div class="hist-bar-fill" style="width:${pct}%;background:${color}">
+                <span class="hist-bar-label">${min} min</span>
+              </div>
+            </div>
+          </div>`;
+        }).join('');
+      }
+      return `<div class="hist-card">
+        <div class="hist-day">${dayName}</div>
+        <div class="hist-date">${dateStr}${manual ? ' · manual run' : ''}</div>
+        ${inner}
+      </div>`;
+    }).join('');
+  } catch(e) {
+    container.innerHTML = '<div style="text-align:center;padding:40px;color:#607080">Could not load history.</div>';
+  }
+}
+
 function refreshWeatherPage() { updateWeatherPage(); updateWeatherWidget(); }
 
 // ── Boot ───────────────────────────────────────────────
 loadSchedule();
+loadTz();
 initManualSelect();
 pollStatus();
 pollInfo();
