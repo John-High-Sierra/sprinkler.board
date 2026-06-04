@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>5-Day Forecast — SprinKlr-8 Mockup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@300;400;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #0d1b2a;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Barlow Condensed', sans-serif;
+    padding: 40px 20px;
+    gap: 32px;
+  }
+
+  h2 {
+    color: #607080;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 3px;
+    font-weight: 400;
+  }
+
+  /* ── Forecast strip ─────────────────────────────────── */
+  .forecast-strip {
+    display: flex;
+    gap: 10px;
+    width: 100%;
+    max-width: 560px;
+  }
+
+  .day-card {
+    flex: 1;
+    background: #131f2e;
+    border: 1.5px solid #1a3a5c;
+    border-radius: 16px;
+    padding: 14px 8px 12px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    cursor: default;
+    transition: border-color 0.2s, transform 0.2s, box-shadow 0.2s;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .day-card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg, rgba(79,195,247,0.04) 0%, transparent 60%);
+    pointer-events: none;
+  }
+
+  .day-card:hover {
+    border-color: #4fc3f7;
+    transform: translateY(-3px);
+    box-shadow: 0 8px 24px rgba(79,195,247,0.12);
+  }
+
+  .day-card.today {
+    border-color: #4fc3f7;
+    background: #0e2030;
+  }
+
+  .day-card.today::before {
+    background: linear-gradient(180deg, rgba(79,195,247,0.10) 0%, transparent 60%);
+  }
+
+  /* Day name */
+  .day-name {
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: #607080;
+  }
+
+  .day-card.today .day-name {
+    color: #4fc3f7;
+  }
+
+  /* Weather icon */
+  .day-icon {
+    font-size: 2rem;
+    line-height: 1;
+    filter: drop-shadow(0 2px 8px rgba(0,0,0,0.4));
+    transition: transform 0.2s;
+  }
+
+  .day-card:hover .day-icon { transform: scale(1.15); }
+
+  /* Temps */
+  .temps {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    width: 100%;
+  }
+
+  .temp-high {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 1.25rem;
+    font-weight: 700;
+    line-height: 1;
+  }
+
+  .temp-low {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.85rem;
+    font-weight: 400;
+    color: #4fc3f7;
+    line-height: 1;
+  }
+
+  /* Temperature range bar */
+  .temp-bar-track {
+    width: calc(100% - 8px);
+    height: 4px;
+    background: rgba(79,195,247,0.12);
+    border-radius: 2px;
+    margin-top: 2px;
+    overflow: hidden;
+  }
+
+  .temp-bar-fill {
+    height: 100%;
+    border-radius: 2px;
+  }
+
+  /* Rain */
+  .rain-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    width: calc(100% - 8px);
+    margin-top: 2px;
+  }
+
+  .rain-icon { font-size: 0.7rem; }
+
+  .rain-pct {
+    font-size: 0.7rem;
+    font-weight: 700;
+    font-family: 'JetBrains Mono', monospace;
+    min-width: 26px;
+  }
+
+  .rain-bar-track {
+    flex: 1;
+    height: 3px;
+    background: rgba(79,195,247,0.12);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+
+  .rain-bar-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.6s ease;
+  }
+
+  /* ── Toggle ─────────────────────────────────────────── */
+  .unit-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    background: #131f2e;
+    border: 1.5px solid #1a3a5c;
+    border-radius: 24px;
+    padding: 3px;
+    position: relative;
+  }
+
+  .unit-btn {
+    background: none;
+    border: none;
+    color: #607080;
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 0.85rem;
+    font-weight: 700;
+    letter-spacing: 1px;
+    padding: 5px 16px;
+    cursor: pointer;
+    border-radius: 20px;
+    transition: color 0.2s;
+    position: relative;
+    z-index: 1;
+  }
+
+  .unit-btn.active {
+    color: #0d1b2a;
+  }
+
+  .unit-slider {
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    height: calc(100% - 6px);
+    background: #4fc3f7;
+    border-radius: 20px;
+    transition: transform 0.25s cubic-bezier(.4,0,.2,1), width 0.25s;
+    pointer-events: none;
+  }
+
+  /* ── Label ──────────────────────────────────────────── */
+  .section-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #90caf9;
+    font-size: 0.8rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    width: 100%;
+    max-width: 560px;
+  }
+
+  .section-label::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: linear-gradient(90deg, #1a3a5c, transparent);
+  }
+</style>
+</head>
+<body>
+
+<div class="section-label">5-Day Forecast</div>
+
+<div class="forecast-strip" id="strip"></div>
+
+<div style="display:flex;flex-direction:column;align-items:center;gap:8px">
+  <div class="unit-toggle" id="toggle">
+    <div class="unit-slider" id="slider"></div>
+    <button class="unit-btn active" id="btn-c" onclick="setUnit('C')">°C</button>
+    <button class="unit-btn"        id="btn-f" onclick="setUnit('F')">°F</button>
+  </div>
+  <span style="color:#607080;font-size:0.72rem;letter-spacing:1px">TEMPERATURE UNIT</span>
+</div>
+
+<script>
+// ── Mock forecast data (Celsius) ─────────────────────────
+const DAYS = [
+  { name:'Today', icon:'☀️',  hi: 28, lo: 16, rain: 5,  code: 0  },
+  { name:'Tue',   icon:'⛅',  hi: 24, lo: 14, rain: 20, code: 2  },
+  { name:'Wed',   icon:'🌧',  hi: 18, lo: 12, rain: 85, code: 61 },
+  { name:'Thu',   icon:'🌦',  hi: 21, lo: 13, rain: 45, code: 55 },
+  { name:'Fri',   icon:'🌤',  hi: 26, lo: 15, rain: 10, code: 1  },
+];
+
+let unit = 'C';
+
+// ── Colour helpers ───────────────────────────────────────
+function tempColor(c) {
+  // 5°C → ice blue … 35°C → deep amber
+  const t = Math.max(0, Math.min(1, (c - 5) / 30));
+  // interpolate #4fc3f7 → #ffb74d → #ef6c00
+  if (t < 0.5) {
+    const s = t * 2;
+    return lerpColor('#4fc3f7', '#ffca28', s);
+  } else {
+    const s = (t - 0.5) * 2;
+    return lerpColor('#ffca28', '#ef6c00', s);
+  }
+}
+
+function rainColor(pct) {
+  if (pct < 20)  return '#4fc3f7';
+  if (pct < 50)  return '#1e88e5';
+  if (pct < 70)  return '#1565c0';
+  return '#0d47a1';
+}
+
+function lerpColor(a, b, t) {
+  const ah = parseInt(a.slice(1), 16);
+  const bh = parseInt(b.slice(1), 16);
+  const ar = (ah >> 16) & 0xff, ag = (ah >> 8) & 0xff, ab = ah & 0xff;
+  const br = (bh >> 16) & 0xff, bg = (bh >> 8) & 0xff, bb = bh & 0xff;
+  const r = Math.round(ar + (br - ar) * t);
+  const g = Math.round(ag + (bg - ag) * t);
+  const b2 = Math.round(ab + (bb - ab) * t);
+  return `#${((r << 16) | (g << 8) | b2).toString(16).padStart(6, '0')}`;
+}
+
+function toF(c)  { return Math.round(c * 9/5 + 32); }
+function fmt(c)  { return unit === 'C' ? `${c}°` : `${toF(c)}°`; }
+
+// ── Render ───────────────────────────────────────────────
+function render() {
+  const strip = document.getElementById('strip');
+  strip.innerHTML = '';
+
+  // Bar: map the temperature range across all days for relative bar sizing
+  const allHi = DAYS.map(d => d.hi);
+  const allLo = DAYS.map(d => d.lo);
+  const absMin = Math.min(...allLo) - 2;
+  const absMax = Math.max(...allHi) + 2;
+  const span   = absMax - absMin;
+
+  DAYS.forEach((d, i) => {
+    const card = document.createElement('div');
+    card.className = 'day-card' + (i === 0 ? ' today' : '');
+
+    const barLeft  = ((d.lo - absMin) / span * 100).toFixed(1);
+    const barWidth = ((d.hi - d.lo)   / span * 100).toFixed(1);
+    const hiColor  = tempColor(d.hi);
+    const loColor  = tempColor(d.lo);
+    const rColor   = rainColor(d.rain);
+
+    card.innerHTML = `
+      <div class="day-name">${d.name}</div>
+      <div class="day-icon">${d.icon}</div>
+      <div class="temps">
+        <div class="temp-high" style="color:${hiColor}">${fmt(d.hi)}</div>
+        <div class="temp-low"  style="color:${loColor}">${fmt(d.lo)}</div>
+      </div>
+      <div class="temp-bar-track">
+        <div class="temp-bar-fill" style="
+          margin-left:${barLeft}%;
+          width:${barWidth}%;
+          background:linear-gradient(90deg, ${loColor}, ${hiColor});
+        "></div>
+      </div>
+      <div class="rain-row">
+        <span class="rain-icon">💧</span>
+        <span class="rain-pct" style="color:${rColor}">${d.rain}%</span>
+        <div class="rain-bar-track">
+          <div class="rain-bar-fill" style="width:${d.rain}%;background:${rColor}"></div>
+        </div>
+      </div>
+    `;
+    strip.appendChild(card);
+  });
+}
+
+// ── Unit toggle ──────────────────────────────────────────
+function setUnit(u) {
+  unit = u;
+  document.getElementById('btn-c').classList.toggle('active', u === 'C');
+  document.getElementById('btn-f').classList.toggle('active', u === 'F');
+
+  const btnC   = document.getElementById('btn-c');
+  const btnF   = document.getElementById('btn-f');
+  const slider = document.getElementById('slider');
+
+  if (u === 'C') {
+    slider.style.transform = 'translateX(0)';
+    slider.style.width     = btnC.offsetWidth + 'px';
+  } else {
+    slider.style.transform = `translateX(${btnC.offsetWidth}px)`;
+    slider.style.width     = btnF.offsetWidth + 'px';
+  }
+  render();
+}
+
+// Init
+render();
+// Set slider initial size
+const btnC = document.getElementById('btn-c');
+document.getElementById('slider').style.width = btnC.offsetWidth + 'px';
+</script>
+</body>
+</html>
