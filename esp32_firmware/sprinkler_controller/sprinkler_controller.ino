@@ -41,6 +41,7 @@
 #include <WiFi.h>
 #include <WiFiManager.h>
 #include "html_content.h"
+#include "pwa_content.h"
 #include <ESPmDNS.h>
 #include <WebServer.h>
 #include <ArduinoOTA.h>
@@ -1411,11 +1412,11 @@ void setupRoutes() {
     server.send(200, "application/json", resp);
   });
 
-  // ── PWA static files ──────────────────────────────────────────
-  server.on("/manifest.json", HTTP_GET, []() { serveFile("/manifest.json", "application/manifest+json"); });
-  server.on("/sw.js",         HTTP_GET, []() { serveFile("/sw.js",         "application/javascript"); });
-  server.on("/icon-192.png",  HTTP_GET, []() { serveFile("/icon-192.png",  "image/png"); });
-  server.on("/icon-512.png",  HTTP_GET, []() { serveFile("/icon-512.png",  "image/png"); });
+  // ── PWA static files (embedded in firmware — no LittleFS needed) ─
+  server.on("/manifest.json", HTTP_GET, []() { server.send_P(200, "application/manifest+json", MANIFEST_JSON); });
+  server.on("/sw.js",         HTTP_GET, []() { server.send_P(200, "application/javascript",    SW_JS); });
+  server.on("/icon-192.png",  HTTP_GET, []() { server.send_P(200, "image/png", (const char*)ICON_192_PNG, sizeof(ICON_192_PNG)); });
+  server.on("/icon-512.png",  HTTP_GET, []() { server.send_P(200, "image/png", (const char*)ICON_512_PNG, sizeof(ICON_512_PNG)); });
 
   // ── POST /api/telegram_test ───────────────────────────────────
   server.on("/api/telegram_test", HTTP_POST, []() {
