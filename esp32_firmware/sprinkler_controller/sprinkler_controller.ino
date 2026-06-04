@@ -83,7 +83,7 @@ const int RELAY_PINS[8] = {32, 33, 25, 26, 27, 14, 12, 13};
 #define AP_PASSWORD    "sprinkler123"
 #define NTP_SERVER     "pool.ntp.org"
 #define OTA_PASSWORD   "sprinkler123"  // Password for Arduino IDE OTA and web UI upload
-#define FW_VERSION     "1.7.0"  // HTML embedded in firmware — single upload, no LittleFS needed
+#define FW_VERSION     "1.8.0"  // HTML embedded in firmware — single upload, no LittleFS needed
 
 // Cloud update URLs — point these at your GitHub repo
 #define CLOUD_FW_URL  "https://github.com/John-High-Sierra/sprinkler.board/releases/latest/download/sprinkler_controller.bin"
@@ -135,6 +135,8 @@ volatile RunStatus runStatus = {false, -1, -1, 0, false};
 SemaphoreHandle_t statusMutex;
 SemaphoreHandle_t scheduleMutex;
 volatile bool     stopRequested = false;
+volatile bool     skipNextScheduledRun = false;
+TaskHandle_t      telegramTaskHandle = NULL;
 
 WebServer         server(80);
 
@@ -150,6 +152,9 @@ struct BoardConfig {
   int  cycleTime;            // minutes per cycle, default 4
   char tempUnit[2];          // "C" or "F", display preference only
   char zoneNames[8][32];     // user-defined zone names
+  bool telegramEnabled;
+  char telegramToken[128];   // bot token from @BotFather
+  char telegramChatId[32];   // authorized chat ID — all others ignored
 };
 BoardConfig boardConfig;
 
@@ -307,11 +312,14 @@ void loadConfig() {
   for (int i = 0; i < 8; i++) {
     snprintf(boardConfig.zoneNames[i], sizeof(boardConfig.zoneNames[i]), "Zone %d", i + 1);
   }
+  boardConfig.telegramEnabled = false;
+  memset(boardConfig.telegramToken,  0, sizeof(boardConfig.telegramToken));
+  memset(boardConfig.telegramChatId, 0, sizeof(boardConfig.telegramChatId));
 
   if (!LittleFS.exists(CONFIG_FILE)) return;
   File f = LittleFS.open(CONFIG_FILE, "r");
   if (!f) return;
-  DynamicJsonDocument doc(1024);
+  DynamicJsonDocument doc(2048);
   DeserializationError err = deserializeJson(doc, f);
   f.close();
   if (err) {
@@ -336,13 +344,16 @@ void loadConfig() {
       if (n) strlcpy(boardConfig.zoneNames[i], n, sizeof(boardConfig.zoneNames[i]));
     }
   }
+  boardConfig.telegramEnabled = doc["telegram_enabled"] | false;
+  { const char* v = doc["telegram_token"]   | ""; strlcpy(boardConfig.telegramToken,  v, sizeof(boardConfig.telegramToken)); }
+  { const char* v = doc["telegram_chat_id"] | ""; strlcpy(boardConfig.telegramChatId, v, sizeof(boardConfig.telegramChatId)); }
   Serial.printf("[CFG] Timezone: %s  Lat: %.4f  Lon: %.4f  WeatherSkip: %s\n",
     boardConfig.timezone, boardConfig.latitude, boardConfig.longitude,
     boardConfig.weatherEnabled ? "ON" : "OFF");
 }
 
 void saveConfig() {
-  DynamicJsonDocument doc(1024);
+  DynamicJsonDocument doc(2048);
   doc["timezone"]             = boardConfig.timezone;
   doc["latitude"]             = boardConfig.latitude;
   doc["longitude"]            = boardConfig.longitude;
@@ -354,6 +365,9 @@ void saveConfig() {
   doc["temp_unit"]              = boardConfig.tempUnit;
   JsonArray zn = doc.createNestedArray("zone_names");
   for (int i = 0; i < 8; i++) zn.add(boardConfig.zoneNames[i]);
+  doc["telegram_enabled"]  = boardConfig.telegramEnabled;
+  doc["telegram_token"]    = boardConfig.telegramToken;
+  doc["telegram_chat_id"]  = boardConfig.telegramChatId;
   File f = LittleFS.open(CONFIG_FILE, "w");
   if (!f) return;
   serializeJson(doc, f);
@@ -515,6 +529,21 @@ void runSequenceTask(void* param) {
 
   stopRequested = false;
   int actualSecs[NUM_ZONES] = {0};
+  {
+    int totalMin = 0, zoneCount = 0;
+    xSemaphoreTake(scheduleMutex, portMAX_DELAY);
+    for (int z = 0; z < NUM_ZONES; z++) {
+      if (daySched.durations[z] > 0) {
+        totalMin += daySched.durations[z];
+        zoneCount++;
+      }
+    }
+    xSemaphoreGive(scheduleMutex);
+    char buf[128];
+    snprintf(buf, sizeof(buf), "\xF0\x9F\x92\xA7 %s run started \xe2\x80\x94 %d zone%s, ~%d min",
+      manual ? "Manual" : "Scheduled", zoneCount, zoneCount == 1 ? "" : "s", totalMin);
+    telegramNotify(buf);
+  }
 
   if (boardConfig.cycleAndSoakEnabled) {
     // ── Cycle & Soak mode ────────────────────────────────
@@ -643,6 +672,18 @@ void runSequenceTask(void* param) {
       if (actualSecs[z] > 0) { logZ[logCount] = z; logS[logCount] = actualSecs[z]; logCount++; }
     }
     appendRunLog(ts, manual ? "manual" : "schedule", logZ, logS, logCount, nullptr);
+    {
+      char buf[384];
+      int pos = snprintf(buf, sizeof(buf), "\xe2\x9c\x85 Run complete");
+      int totalSec = 0;
+      for (int i = 0; i < logCount; i++) {
+        pos += snprintf(buf + pos, sizeof(buf) - pos, "\n%s \xe2\x80\x94 %dm",
+          boardConfig.zoneNames[logZ[i]], logS[i] / 60);
+        totalSec += logS[i];
+      }
+      snprintf(buf + pos, sizeof(buf) - pos, "\nTotal: %dm", totalSec / 60);
+      telegramNotify(buf);
+    }
   }
   vTaskDelete(NULL);
 }
@@ -655,6 +696,12 @@ void runSingleZoneTask(void* p) {
 
   stopRequested = false;
   int actualSec = 0;
+  {
+    char buf[96];
+    snprintf(buf, sizeof(buf), "\xF0\x9F\x92\xA7 Manual run started \xe2\x80\x94 %s, %d min",
+      boardConfig.zoneNames[z], dur);
+    telegramNotify(buf);
+  }
 
   if (boardConfig.cycleAndSoakEnabled) {
     int cycleTimeSec   = boardConfig.cycleTime * 60;
@@ -728,6 +775,10 @@ void runSingleZoneTask(void* p) {
     time_t ts = time(nullptr);
     int logZ[1] = {z}, logS[1] = {actualSec};
     appendRunLog(ts, "manual", logZ, logS, 1, nullptr);
+    char buf[96];
+    snprintf(buf, sizeof(buf), "\xe2\x9c\x85 Manual run complete \xe2\x80\x94 %s, %dm",
+      boardConfig.zoneNames[z], actualSec / 60);
+    telegramNotify(buf);
   }
   vTaskDelete(NULL);
 }
@@ -781,6 +832,15 @@ void scheduleCheckerTask(void* param) {
       lastScheduledDay    = dayIndex;
       lastScheduledMinute = minute;
 
+      if (skipNextScheduledRun) {
+        skipNextScheduledRun = false;
+        Serial.println("[SCHED] Run skipped by user command");
+        appendRunLog(now, "schedule", nullptr, nullptr, 0, "user skip");
+        telegramNotify("\xe2\x8f\xad Scheduled run skipped by user request.");
+        lastScheduledDay    = dayIndex;
+        lastScheduledMinute = minute;
+        continue;
+      }
       const char* skipReason = shouldSkipForWeather();
       if (skipReason) {
         xSemaphoreTake(weatherMutex, portMAX_DELAY);
@@ -791,6 +851,11 @@ void scheduleCheckerTask(void* param) {
         Serial.printf("[SCHED] Run SKIPPED — %s (rain today: %d%%, rain tomorrow: %d%%, min: %.1f°C)\n",
           skipReason, rainToday, rainTomrw, minTemp);
         appendRunLog(now, "schedule", nullptr, nullptr, 0, skipReason);
+        {
+          char buf[128];
+          snprintf(buf, sizeof(buf), "\xe2\x8f\xad Run skipped \xe2\x80\x94 %s", skipReason);
+          telegramNotify(buf);
+        }
       } else {
         Serial.printf("[SCHED] Scheduled run: %s %02d:%02d\n",
           (const char*[]){"Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"}[dayIndex],
@@ -872,6 +937,176 @@ void serveFile(const char* path, const char* contentType) {
   if (!f) { server.send(404, "text/plain", "Not found"); return; }
   server.streamFile(f, contentType);
   f.close();
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  TELEGRAM NOTIFICATIONS
+// ═══════════════════════════════════════════════════════════════
+void telegramSend(const char* text) {
+  if (strlen(boardConfig.telegramToken) == 0 || strlen(boardConfig.telegramChatId) == 0) return;
+  WiFiClientSecure client;
+  client.setInsecure();
+  HTTPClient https;
+  char url[196];
+  snprintf(url, sizeof(url), "https://api.telegram.org/bot%s/sendMessage",
+    boardConfig.telegramToken);
+  if (!https.begin(client, url)) return;
+  https.addHeader("Content-Type", "application/json");
+  DynamicJsonDocument body(512);
+  body["chat_id"] = boardConfig.telegramChatId;
+  body["text"]    = text;
+  String bodyStr;
+  serializeJson(body, bodyStr);
+  https.POST(bodyStr);
+  https.end();
+}
+
+// One-shot task wrapper — lets run tasks notify without blocking
+void telegramNotifyTask(void* param) {
+  char* msg = (char*)param;
+  telegramSend(msg);
+  free(msg);
+  vTaskDelete(NULL);
+}
+
+void telegramNotify(const char* msg) {
+  if (!boardConfig.telegramEnabled || strlen(boardConfig.telegramToken) == 0) return;
+  char* buf = (char*)malloc(strlen(msg) + 1);
+  if (!buf) return;
+  strcpy(buf, msg);
+  if (xTaskCreate(telegramNotifyTask, "tg_ntfy", 8192, buf, 1, NULL) != pdPASS) {
+    free(buf);
+  }
+}
+
+void handleTelegramStatus() {
+  char buf[256];
+  xSemaphoreTake(weatherMutex, portMAX_DELAY);
+  bool  valid = weatherCache.valid;
+  float temp  = weatherCache.currentTemp;
+  int   rain  = weatherCache.rainProb[0];
+  xSemaphoreGive(weatherMutex);
+  xSemaphoreTake(statusMutex, portMAX_DELAY);
+  bool running    = runStatus.isRunning;
+  int  activeZone = runStatus.activeZone;
+  int  remaining  = runStatus.remainingTime;
+  xSemaphoreGive(statusMutex);
+
+  char wxLine[64] = "Weather: unavailable";
+  if (valid) {
+    float disp = (boardConfig.tempUnit[0] == 'F') ? temp * 9.0f / 5.0f + 32.0f : temp;
+    snprintf(wxLine, sizeof(wxLine), "\xF0\x9F\xAC\xa1 %.1f\xc2\xb0%s  Rain: %d%%",
+      disp, boardConfig.tempUnit, rain);
+  }
+  char runLine[80] = "\xe2\x9c\x85 Idle";
+  if (running && activeZone >= 0 && activeZone < NUM_ZONES) {
+    snprintf(runLine, sizeof(runLine), "\xF0\x9F\x92\xA7 %s running \xe2\x80\x94 %dm left",
+      boardConfig.zoneNames[activeZone], remaining / 60);
+  }
+  snprintf(buf, sizeof(buf), "SprinKlr-8\n%s\n%s", wxLine, runLine);
+  telegramSend(buf);
+}
+
+void handleTelegramRun(const char* args) {
+  int zone = -1, dur = -1;
+  if (sscanf(args, "%d %d", &zone, &dur) != 2 || zone < 1 || zone > NUM_ZONES || dur < 1 || dur > 120) {
+    char err[80];
+    snprintf(err, sizeof(err), "Usage: /run <zone> <min>  e.g. /run 3 10  (zones 1\xe2\x80\x93%d, 1\xe2\x80\x93120 min)", NUM_ZONES);
+    telegramSend(err);
+    return;
+  }
+  xSemaphoreTake(statusMutex, portMAX_DELAY);
+  bool running = runStatus.isRunning;
+  xSemaphoreGive(statusMutex);
+  if (running) { telegramSend("A run is already in progress. Send /stop first."); return; }
+  SingleZoneArgs* a = new SingleZoneArgs{zone - 1, dur};
+  xTaskCreate(runSingleZoneTask, "single_zone", 4096, a, 1, NULL);
+}
+
+void handleTelegramStop() {
+  xSemaphoreTake(statusMutex, portMAX_DELAY);
+  bool running = runStatus.isRunning;
+  xSemaphoreGive(statusMutex);
+  if (!running) { telegramSend("Nothing is running."); return; }
+  stopRequested = true;
+  telegramSend("\xe2\x8f\xb9 Stop signal sent.");
+}
+
+void handleTelegramSkip() {
+  skipNextScheduledRun = true;
+  telegramSend("\xe2\x8f\xad Next scheduled run will be skipped.");
+}
+
+void handleTelegramCommand(const char* text) {
+  if (strncmp(text, "/status", 7) == 0)     { handleTelegramStatus(); }
+  else if (strncmp(text, "/run ", 5) == 0)  { handleTelegramRun(text + 5); }
+  else if (strncmp(text, "/stop", 5) == 0)  { handleTelegramStop(); }
+  else if (strncmp(text, "/skip", 5) == 0)  { handleTelegramSkip(); }
+  else if (strncmp(text, "/help", 5) == 0) {
+    telegramSend(
+      "SprinKlr-8 Commands:\n"
+      "/status \xe2\x80\x94 weather + run state\n"
+      "/run <zone> <min> \xe2\x80\x94 start a zone (e.g. /run 3 10)\n"
+      "/skip \xe2\x80\x94 skip next scheduled run\n"
+      "/stop \xe2\x80\x94 stop current run\n"
+      "/help \xe2\x80\x94 show this list"
+    );
+  }
+  else { telegramSend("Unknown command. Send /help for the list."); }
+}
+
+void telegramTask(void* param) {
+  long lastUpdateId = -1;
+  Serial.println("[TG] Telegram task started");
+
+  while (true) {
+    if (!boardConfig.telegramEnabled || strlen(boardConfig.telegramToken) == 0) {
+      vTaskDelay(pdMS_TO_TICKS(5000));
+      continue;
+    }
+
+    WiFiClientSecure client;
+    client.setInsecure();
+    HTTPClient https;
+    char url[256];
+    snprintf(url, sizeof(url),
+      "https://api.telegram.org/bot%s/getUpdates?timeout=25&offset=%ld",
+      boardConfig.telegramToken, lastUpdateId + 1);
+
+    if (!https.begin(client, url)) {
+      vTaskDelay(pdMS_TO_TICKS(5000));
+      continue;
+    }
+    https.setTimeout(30000);
+    int code = https.GET();
+    if (code != 200) {
+      https.end();
+      Serial.printf("[TG] getUpdates HTTP %d\n", code);
+      vTaskDelay(pdMS_TO_TICKS(10000));
+      continue;
+    }
+
+    String body = https.getString();
+    https.end();
+
+    DynamicJsonDocument doc(4096);
+    if (deserializeJson(doc, body) != DeserializationError::Ok) continue;
+    if (!doc["ok"].as<bool>()) continue;
+
+    JsonArray results = doc["result"].as<JsonArray>();
+    for (JsonObject update : results) {
+      lastUpdateId = update["update_id"].as<long>();
+      if (!update.containsKey("message")) continue;
+      JsonObject msg = update["message"].as<JsonObject>();
+      String chatId = msg["chat"]["id"].as<String>();
+      if (chatId != String(boardConfig.telegramChatId)) continue;
+      const char* text = msg["text"] | "";
+      if (strlen(text) > 0) {
+        Serial.printf("[TG] cmd from %s: %s\n", chatId.c_str(), text);
+        handleTelegramCommand(text);
+      }
+    }
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1030,7 +1265,7 @@ void setupRoutes() {
 
   // ── GET /api/config ───────────────────────────────────────────
   server.on("/api/config", HTTP_GET, []() {
-    DynamicJsonDocument doc(1024);
+    DynamicJsonDocument doc(2048);
     doc["timezone"]               = boardConfig.timezone;
     doc["latitude"]               = boardConfig.latitude;
     doc["longitude"]              = boardConfig.longitude;
@@ -1041,6 +1276,9 @@ void setupRoutes() {
     doc["cycle_time"]             = boardConfig.cycleTime;
     doc["temp_unit"]              = boardConfig.tempUnit;
     { JsonArray zn = doc.createNestedArray("zone_names"); for (int i = 0; i < 8; i++) zn.add(boardConfig.zoneNames[i]); }
+    doc["telegram_enabled"]  = boardConfig.telegramEnabled;
+    doc["telegram_token"]    = boardConfig.telegramToken;
+    doc["telegram_chat_id"]  = boardConfig.telegramChatId;
     String out; serializeJson(doc, out);
     server.send(200, "application/json", out);
   });
@@ -1048,7 +1286,7 @@ void setupRoutes() {
   // ── POST /api/config  body: {"timezone":"EST5EDT,M3.2.0,M11.1.0"} ──
   server.on("/api/config", HTTP_POST, []() {
     if (!server.hasArg("plain")) { server.send(400, "application/json", "{\"error\":\"No body\"}"); return; }
-    DynamicJsonDocument doc(1024);
+    DynamicJsonDocument doc(2048);
     if (deserializeJson(doc, server.arg("plain")) != DeserializationError::Ok) {
       server.send(400, "application/json", "{\"error\":\"Invalid JSON\"}"); return;
     }
@@ -1077,6 +1315,15 @@ void setupRoutes() {
         const char* n = zn[i].as<const char*>();
         if (n) strlcpy(boardConfig.zoneNames[i], n, sizeof(boardConfig.zoneNames[i]));
       }
+    }
+    if (doc.containsKey("telegram_enabled")) boardConfig.telegramEnabled = doc["telegram_enabled"].as<bool>();
+    if (doc.containsKey("telegram_token")) {
+      const char* v = doc["telegram_token"].as<const char*>();
+      if (v) strlcpy(boardConfig.telegramToken, v, sizeof(boardConfig.telegramToken));
+    }
+    if (doc.containsKey("telegram_chat_id")) {
+      const char* v = doc["telegram_chat_id"].as<const char*>();
+      if (v) strlcpy(boardConfig.telegramChatId, v, sizeof(boardConfig.telegramChatId));
     }
     // Notify weatherTask to refetch immediately when location or skip toggle changes
     bool locationChanged = doc.containsKey("latitude") || doc.containsKey("longitude") || doc.containsKey("weather_enabled");
@@ -1162,6 +1409,22 @@ void setupRoutes() {
     }
     String resp = "{\"zone\":" + String(zone) + ",\"state\":" + String(state) + "}";
     server.send(200, "application/json", resp);
+  });
+
+  // ── PWA static files ──────────────────────────────────────────
+  server.on("/manifest.json", HTTP_GET, []() { serveFile("/manifest.json", "application/manifest+json"); });
+  server.on("/sw.js",         HTTP_GET, []() { serveFile("/sw.js",         "application/javascript"); });
+  server.on("/icon-192.png",  HTTP_GET, []() { serveFile("/icon-192.png",  "image/png"); });
+  server.on("/icon-512.png",  HTTP_GET, []() { serveFile("/icon-512.png",  "image/png"); });
+
+  // ── POST /api/telegram_test ───────────────────────────────────
+  server.on("/api/telegram_test", HTTP_POST, []() {
+    if (!boardConfig.telegramEnabled || strlen(boardConfig.telegramToken) == 0) {
+      server.send(400, "application/json", "{\"error\":\"Telegram not configured\"}");
+      return;
+    }
+    telegramSend("SprinKlr connected \xe2\x9c\x85 \xe2\x80\x94 Telegram notifications are working.");
+    server.send(200, "application/json", "{\"message\":\"Test message sent\"}");
   });
 
   // ── 404 handler ───────────────────────────────────────────────
@@ -1575,6 +1838,7 @@ void setup() {
   xTaskCreate(scheduleCheckerTask, "sched_check", 4096, NULL, 1, NULL);
   xTaskCreate(ledTask,             "led_blink",   1024, NULL, 1, NULL);
   xTaskCreate(weatherTask,         "weather",     8192, NULL, 1, &weatherTaskHandle);
+  xTaskCreate(telegramTask,        "telegram",    8192, NULL, 1, &telegramTaskHandle);
 
   Serial.println("[BOOT] All systems GO");
 }

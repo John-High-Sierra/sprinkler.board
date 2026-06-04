@@ -6,6 +6,12 @@ static const char INDEX_HTML[] PROGMEM = R"====(
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>SprinKlr-8</title>
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#0d9488">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="SprinKlr">
+<link rel="apple-touch-icon" href="/icon-192.png">
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
 body { font-family: 'Segoe UI', system-ui, sans-serif; background: #0f1923; color: #e8eaf0; min-height: 100vh; padding-bottom: 80px; font-size: 19px; }
@@ -433,6 +439,29 @@ select:focus, input[type="number"]:focus { outline: none; border-color: #4fc3f7;
   <div class="sec-hdr"><span class="sec-title">Zone Names</span></div>
   <div class="settings-section" id="zoneNamesList"></div>
 
+  <div class="sec-hdr"><span class="sec-title">Telegram</span></div>
+  <div class="settings-section">
+    <div class="settings-row">
+      <span class="settings-label">Enable Telegram</span>
+      <label class="toggle"><input type="checkbox" id="tg-enable"><span class="slider"></span></label>
+    </div>
+    <div class="settings-row" style="flex-direction:column;align-items:flex-start;gap:8px">
+      <span class="settings-label">Bot Token</span>
+      <input type="password" id="tg-token" class="tz-inp" style="width:100%" placeholder="123456:ABCdef…" autocomplete="off">
+    </div>
+    <div class="settings-row" style="flex-direction:column;align-items:flex-start;gap:8px">
+      <span class="settings-label">Chat ID</span>
+      <input type="text" id="tg-chatid" class="tz-inp" style="width:100%" placeholder="123456789">
+      <span style="font-size:0.82rem;color:#607080;line-height:1.4">Create a bot at @BotFather to get a token.<br>Get your chat ID by messaging @userinfobot.</span>
+    </div>
+    <div class="settings-row">
+      <button class="save-btn" onclick="saveTelegram()">Save Telegram Settings</button>
+    </div>
+    <div class="settings-row">
+      <button class="save-btn" style="background:#0a5c4e" onclick="testTelegram()">Send Test Message</button>
+    </div>
+  </div>
+
   <div class="sec-hdr"><span class="sec-title">Updates</span></div>
   <div class="settings-section">
     <div class="settings-row" style="flex-direction:column;align-items:flex-start;gap:10px">
@@ -647,7 +676,7 @@ function showPage(pg, el) {
   document.getElementById('page-'+pg).classList.add('active');
   if (el) el.classList.add('active');
   if (pg==='status')   pollInfo();
-  if (pg==='settings') { renderZoneNameSettings(); loadTz(); loadWeatherSettings(); loadCycleAndSoak(); pollInfo(); }
+  if (pg==='settings') { renderZoneNameSettings(); loadTz(); loadWeatherSettings(); loadCycleAndSoak(); loadTelegram(); pollInfo(); }
   if (pg==='weather')  updateWeatherPage();
   if (pg==='history')  loadHistoryPage();
 }
@@ -983,6 +1012,28 @@ async function updateZname(i, v) {
   initManualSelect();
   renderSchedule();
   if (lastStatus) highlightRunningZone(lastStatus);
+}
+
+// ── Telegram ───────────────────────────────────────────
+async function loadTelegram() {
+  try {
+    const r = await GET('/api/config');
+    document.getElementById('tg-enable').checked = r.telegram_enabled || false;
+    document.getElementById('tg-token').value    = r.telegram_token   || '';
+    document.getElementById('tg-chatid').value   = r.telegram_chat_id || '';
+  } catch(e) {}
+}
+async function saveTelegram() {
+  const r = await POST('/api/config', {
+    telegram_enabled:  document.getElementById('tg-enable').checked,
+    telegram_token:    document.getElementById('tg-token').value.trim(),
+    telegram_chat_id:  document.getElementById('tg-chatid').value.trim()
+  });
+  r.message ? toast('Telegram saved ✓') : toast(r.error || 'Save failed', 'err');
+}
+async function testTelegram() {
+  const r = await POST('/api/telegram_test');
+  r.message ? toast('Test message sent ✓') : toast(r.error || 'Check token and chat ID', 'err');
 }
 
 // ── Cloud Updates ──────────────────────────────────────
@@ -1363,7 +1414,8 @@ updateWeatherWidget();
 setInterval(updateWeatherWidget, 300000); // refresh every 5 minutes
 syncUnitToggle();
 </script>
+<script>if('serviceWorker'in navigator)navigator.serviceWorker.register('/sw.js');</script>
 </body>
 </html>
 
-)====";
+)===";
