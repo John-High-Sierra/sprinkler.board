@@ -1,4 +1,4 @@
-// Auto-generated — do not edit. Rebuild from data/index.html
+// Auto-generated -- do not edit. Rebuild from data/index.html
 static const char INDEX_HTML[] PROGMEM = R"====(
 <!DOCTYPE html>
 <html lang="en">
@@ -1418,4 +1418,4 @@ syncUnitToggle();
 </body>
 </html>
 
-)===";
+)====";
