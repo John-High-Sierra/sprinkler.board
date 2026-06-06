@@ -84,7 +84,7 @@ const int RELAY_PINS[8] = {32, 33, 25, 26, 27, 14, 12, 13};
 #define AP_PASSWORD    "sprinkler123"
 #define NTP_SERVER     "pool.ntp.org"
 #define OTA_PASSWORD   "sprinkler123"  // Password for Arduino IDE OTA and web UI upload
-#define FW_VERSION     "1.8.0"  // HTML embedded in firmware — single upload, no LittleFS needed
+#define FW_VERSION     "1.9.0"  // HTML embedded in firmware — single upload, no LittleFS needed
 
 // Cloud update URLs — point these at your GitHub repo
 #define CLOUD_FW_URL  "https://github.com/John-High-Sierra/sprinkler.board/releases/latest/download/sprinkler_controller.bin"
@@ -107,26 +107,26 @@ const int RELAY_PINS[8] = {32, 33, 25, 26, 27, 14, 12, 13};
 // ═══════════════════════════════════════════════════════════════
 //  SCHEDULE DATA STRUCTURE
 // ═══════════════════════════════════════════════════════════════
-struct DaySchedule {
-  bool isActive;
+#define NUM_SCHEDULES 4
+
+struct Schedule {
+  char name[32];
+  bool enabled;
+  bool days[7];          // Mon=0 … Sun=6 — which days this schedule fires
   int  hour;
   int  minute;
   int  durations[NUM_ZONES]; // minutes per zone, 0 = skip
 };
 
-struct SystemSchedule {
-  bool enabled;
-  DaySchedule days[7];
-};
-
 // ═══════════════════════════════════════════════════════════════
 //  GLOBAL STATE
 // ═══════════════════════════════════════════════════════════════
-SystemSchedule schedule;
+Schedule schedules[NUM_SCHEDULES];
+bool     schedulingEnabled;
 
 struct RunStatus {
   bool  isRunning;
-  int   dayIndex;       // -1 if not running
+  int   scheduleIndex;  // -1 if not running or manual single-zone
   int   activeZone;     // 0-indexed, -1 if not running
   int   remainingTime;  // seconds
   bool  manualRun;
@@ -156,6 +156,8 @@ struct BoardConfig {
   bool telegramEnabled;
   char telegramToken[128];   // bot token from @BotFather
   char telegramChatId[32];   // authorized chat ID — all others ignored
+  bool  etScalingEnabled;    // scale zone durations by ET0 ratio
+  float etBaseline;          // mm/day — "normal" day reference ET0
 };
 BoardConfig boardConfig;
 
@@ -168,6 +170,7 @@ struct WeatherCache {
   float loTemps[5];    // degrees C, daily min, index 0 = today
   int   rainProb[5];   // percent, index 0 = today
   int   codes[5];      // WMO weather code, daily, index 0 = today
+  float et0[5];        // mm/day evapotranspiration, index 0 = today
 };
 WeatherCache weatherCache = {};
 SemaphoreHandle_t weatherMutex;
@@ -183,8 +186,8 @@ void applyTimezone() {
   tzset();
 }
 
-int lastScheduledDay = -1;
-int lastScheduledMinute = -1;
+int lastFiredDay[NUM_SCHEDULES];
+int lastFiredMin[NUM_SCHEDULES];
 
 // ═══════════════════════════════════════════════════════════════
 //  RELAY CONTROL
@@ -206,14 +209,14 @@ void setupRelayPins() {
 //  SCHEDULE PERSISTENCE (LittleFS)
 // ═══════════════════════════════════════════════════════════════
 void loadDefaultSchedule() {
-  schedule.enabled = true;
-  for (int d = 0; d < 7; d++) {
-    schedule.days[d].isActive = false;
-    schedule.days[d].hour     = 7;
-    schedule.days[d].minute   = 0;
-    for (int z = 0; z < NUM_ZONES; z++) {
-      schedule.days[d].durations[z] = 10;
-    }
+  schedulingEnabled = true;
+  for (int s = 0; s < NUM_SCHEDULES; s++) {
+    snprintf(schedules[s].name, sizeof(schedules[s].name), "Schedule %d", s + 1);
+    schedules[s].enabled = false;
+    for (int d = 0; d < 7; d++) schedules[s].days[d] = false;
+    schedules[s].hour   = 7;
+    schedules[s].minute = 0;
+    for (int z = 0; z < NUM_ZONES; z++) schedules[s].durations[z] = 0;
   }
 }
 
@@ -231,66 +234,64 @@ bool loadSchedule() {
     return false;
   }
 
-  DynamicJsonDocument doc(4096);
+  DynamicJsonDocument doc(8192);
   DeserializationError err = deserializeJson(doc, f);
   f.close();
 
-  if (err) {
-    Serial.printf("[SCHED] JSON parse error: %s\n", err.c_str());
+  if (err || !doc.containsKey("schedules")) {
+    Serial.printf("[SCHED] JSON parse error or old format: %s — using defaults\n", err.c_str());
     loadDefaultSchedule();
     return false;
   }
 
   xSemaphoreTake(scheduleMutex, portMAX_DELAY);
-
-  schedule.enabled = doc["enabled"] | true;
-  JsonArray days = doc["schedule"].as<JsonArray>();
-
-  for (int d = 0; d < 7 && d < (int)days.size(); d++) {
-    JsonObject day = days[d];
-    schedule.days[d].isActive = day["is_active"].as<bool>();
-    schedule.days[d].hour   = day.containsKey("hour")   ? (int)day["hour"]   : 7;
-    schedule.days[d].minute = day.containsKey("minute") ? (int)day["minute"] : 0;
-
-    JsonArray durs = day["durations"].as<JsonArray>();
-    for (int z = 0; z < NUM_ZONES && z < (int)durs.size(); z++) {
-      schedule.days[d].durations[z] = (int)durs[z];
-    }
-    // Fill remaining zones if fewer were saved
-    for (int z = durs.size(); z < NUM_ZONES; z++) {
-      schedule.days[d].durations[z] = 0;
-    }
+  schedulingEnabled = doc["enabled"] | true;
+  JsonArray arr = doc["schedules"].as<JsonArray>();
+  for (int s = 0; s < NUM_SCHEDULES && s < (int)arr.size(); s++) {
+    JsonObject o = arr[s];
+    const char* nm = o["name"] | "";
+    strlcpy(schedules[s].name, (strlen(nm) > 0 ? nm : "Schedule"), sizeof(schedules[s].name));
+    schedules[s].enabled = o["enabled"] | false;
+    schedules[s].hour    = o.containsKey("hour")   ? (int)o["hour"]   : 7;
+    schedules[s].minute  = o.containsKey("minute") ? (int)o["minute"] : 0;
+    JsonArray daysArr = o["days"].as<JsonArray>();
+    for (int d = 0; d < 7; d++)
+      schedules[s].days[d] = (d < (int)daysArr.size()) ? daysArr[d].as<bool>() : false;
+    JsonArray durs = o["durations"].as<JsonArray>();
+    for (int z = 0; z < NUM_ZONES; z++)
+      schedules[s].durations[z] = (z < (int)durs.size()) ? (int)durs[z] : 0;
   }
-
   xSemaphoreGive(scheduleMutex);
+
+  for (int s = 0; s < NUM_SCHEDULES; s++) {
+    lastFiredDay[s] = -1;
+    lastFiredMin[s] = -1;
+  }
   Serial.println("[SCHED] Schedule loaded OK");
   return true;
 }
 
 bool saveSchedule() {
-  DynamicJsonDocument doc(4096);
+  DynamicJsonDocument doc(8192);
 
   xSemaphoreTake(scheduleMutex, portMAX_DELAY);
-  doc["enabled"] = schedule.enabled;
-  JsonArray days = doc.createNestedArray("schedule");
-
-  for (int d = 0; d < 7; d++) {
-    JsonObject day = days.createNestedObject();
-    day["is_active"] = schedule.days[d].isActive;
-    day["hour"]      = schedule.days[d].hour;
-    day["minute"]    = schedule.days[d].minute;
-    JsonArray durs   = day.createNestedArray("durations");
-    for (int z = 0; z < NUM_ZONES; z++) {
-      durs.add(schedule.days[d].durations[z]);
-    }
+  doc["enabled"] = schedulingEnabled;
+  JsonArray arr = doc.createNestedArray("schedules");
+  for (int s = 0; s < NUM_SCHEDULES; s++) {
+    JsonObject o = arr.createNestedObject();
+    o["name"]    = schedules[s].name;
+    o["enabled"] = schedules[s].enabled;
+    o["hour"]    = schedules[s].hour;
+    o["minute"]  = schedules[s].minute;
+    JsonArray daysArr = o.createNestedArray("days");
+    for (int d = 0; d < 7; d++) daysArr.add(schedules[s].days[d]);
+    JsonArray durs = o.createNestedArray("durations");
+    for (int z = 0; z < NUM_ZONES; z++) durs.add(schedules[s].durations[z]);
   }
   xSemaphoreGive(scheduleMutex);
 
   File f = LittleFS.open(SCHEDULE_FILE, "w");
-  if (!f) {
-    Serial.println("[SCHED] Failed to open file for writing");
-    return false;
-  }
+  if (!f) { Serial.println("[SCHED] Failed to open file for writing"); return false; }
   serializeJson(doc, f);
   f.close();
   Serial.println("[SCHED] Schedule saved OK");
@@ -316,6 +317,8 @@ void loadConfig() {
   boardConfig.telegramEnabled = false;
   memset(boardConfig.telegramToken,  0, sizeof(boardConfig.telegramToken));
   memset(boardConfig.telegramChatId, 0, sizeof(boardConfig.telegramChatId));
+  boardConfig.etScalingEnabled = false;
+  boardConfig.etBaseline       = 4.0f;
 
   if (!LittleFS.exists(CONFIG_FILE)) return;
   File f = LittleFS.open(CONFIG_FILE, "r");
@@ -348,6 +351,8 @@ void loadConfig() {
   boardConfig.telegramEnabled = doc["telegram_enabled"] | false;
   { const char* v = doc["telegram_token"]   | ""; strlcpy(boardConfig.telegramToken,  v, sizeof(boardConfig.telegramToken)); }
   { const char* v = doc["telegram_chat_id"] | ""; strlcpy(boardConfig.telegramChatId, v, sizeof(boardConfig.telegramChatId)); }
+  boardConfig.etScalingEnabled = doc["et_scaling_enabled"] | false;
+  boardConfig.etBaseline       = doc["et_baseline"]        | 4.0f;
   Serial.printf("[CFG] Timezone: %s  Lat: %.4f  Lon: %.4f  WeatherSkip: %s\n",
     boardConfig.timezone, boardConfig.latitude, boardConfig.longitude,
     boardConfig.weatherEnabled ? "ON" : "OFF");
@@ -366,9 +371,11 @@ void saveConfig() {
   doc["temp_unit"]              = boardConfig.tempUnit;
   JsonArray zn = doc.createNestedArray("zone_names");
   for (int i = 0; i < 8; i++) zn.add(boardConfig.zoneNames[i]);
-  doc["telegram_enabled"]  = boardConfig.telegramEnabled;
-  doc["telegram_token"]    = boardConfig.telegramToken;
-  doc["telegram_chat_id"]  = boardConfig.telegramChatId;
+  doc["telegram_enabled"]   = boardConfig.telegramEnabled;
+  doc["telegram_token"]     = boardConfig.telegramToken;
+  doc["telegram_chat_id"]   = boardConfig.telegramChatId;
+  doc["et_scaling_enabled"] = boardConfig.etScalingEnabled;
+  doc["et_baseline"]        = boardConfig.etBaseline;
   File f = LittleFS.open(CONFIG_FILE, "w");
   if (!f) return;
   serializeJson(doc, f);
@@ -423,12 +430,12 @@ void appendRunLog(time_t ts, const char* trigger, int zoneIdxs[], int zoneSecs[]
 void fetchWeather() {
   if (boardConfig.latitude == 0.0f && boardConfig.longitude == 0.0f) return;
 
-  char url[384];
+  char url[512];
   snprintf(url, sizeof(url),
     "https://api.open-meteo.com/v1/forecast"
     "?latitude=%.4f&longitude=%.4f"
     "&current=temperature_2m,weathercode,precipitation"
-    "&daily=precipitation_probability_max,temperature_2m_min,temperature_2m_max,weathercode"
+    "&daily=precipitation_probability_max,temperature_2m_min,temperature_2m_max,weathercode,et0_fao_evapotranspiration"
     "&timezone=auto&forecast_days=5",
     boardConfig.latitude, boardConfig.longitude);
 
@@ -451,7 +458,7 @@ void fetchWeather() {
   String body = https.getString();
   https.end();
 
-  DynamicJsonDocument doc(3072);
+  DynamicJsonDocument doc(4096);
   DeserializationError err = deserializeJson(doc, body);
   if (err) {
     Serial.printf("[WEATHER] JSON parse error: %s\n", err.c_str());
@@ -462,18 +469,19 @@ void fetchWeather() {
   weatherCache.currentTemp = doc["current"]["temperature_2m"] | 0.0f;
   weatherCache.currentCode = doc["current"]["weathercode"]    | 0;
   for (int i = 0; i < 5; i++) {
-    weatherCache.rainProb[i] = doc["daily"]["precipitation_probability_max"][i] | 0;
-    weatherCache.loTemps[i]  = doc["daily"]["temperature_2m_min"][i]            | 0.0f;
-    weatherCache.hiTemps[i]  = doc["daily"]["temperature_2m_max"][i]            | 0.0f;
-    weatherCache.codes[i]    = doc["daily"]["weathercode"][i]                   | 0;
+    weatherCache.rainProb[i] = doc["daily"]["precipitation_probability_max"][i]  | 0;
+    weatherCache.loTemps[i]  = doc["daily"]["temperature_2m_min"][i]             | 0.0f;
+    weatherCache.hiTemps[i]  = doc["daily"]["temperature_2m_max"][i]             | 0.0f;
+    weatherCache.codes[i]    = doc["daily"]["weathercode"][i]                    | 0;
+    weatherCache.et0[i]      = doc["daily"]["et0_fao_evapotranspiration"][i]     | 0.0f;
   }
   weatherCache.valid     = true;
   weatherCache.fetchedAt = millis();
   xSemaphoreGive(weatherMutex);
 
-  Serial.printf("[WEATHER] Temp: %.1f°C  Rain today: %d%%  Rain tomorrow: %d%%  Lo: %.1f°C  Hi: %.1f°C\n",
+  Serial.printf("[WEATHER] Temp: %.1f°C  Rain today: %d%%  ET0 today: %.1fmm  Lo: %.1f°C  Hi: %.1f°C\n",
     weatherCache.currentTemp, weatherCache.rainProb[0],
-    weatherCache.rainProb[1], weatherCache.loTemps[0], weatherCache.hiTemps[0]);
+    weatherCache.et0[0], weatherCache.loTemps[0], weatherCache.hiTemps[0]);
 }
 
 // Returns a skip reason string, or nullptr if no skip needed
@@ -509,40 +517,56 @@ void weatherTask(void* param) {
 //  SPRINKLER SEQUENCE TASK (runs on separate FreeRTOS task)
 // ═══════════════════════════════════════════════════════════════
 struct RunArgs {
-  int dayIndex;
+  int scheduleIndex;
   bool manual;
 };
 
 struct SingleZoneArgs { int zone; int dur; };
 
 void runSequenceTask(void* param) {
-  RunArgs* args = (RunArgs*)param;
-  int dayIndex  = args->dayIndex;
-  bool manual   = args->manual;
+  RunArgs* args   = (RunArgs*)param;
+  int schedIdx    = args->scheduleIndex;
+  bool manual     = args->manual;
   delete args;
 
-  const char* dayNames[] = {"Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"};
-  Serial.printf("[RUN] Starting sequence for %s\n", dayNames[dayIndex]);
+  Serial.printf("[RUN] Starting sequence for schedule %d\n", schedIdx + 1);
 
   xSemaphoreTake(scheduleMutex, portMAX_DELAY);
-  DaySchedule daySched = schedule.days[dayIndex];
+  Schedule sched = schedules[schedIdx];
   xSemaphoreGive(scheduleMutex);
+
+  // ── Compute ET0 scaling multiplier ──────────────────────
+  float etMult = 1.0f;
+  if (boardConfig.etScalingEnabled) {
+    xSemaphoreTake(weatherMutex, portMAX_DELAY);
+    float et0 = weatherCache.et0[0];
+    xSemaphoreGive(weatherMutex);
+    if (et0 > 0.0f && boardConfig.etBaseline > 0.0f)
+      etMult = constrain(et0 / boardConfig.etBaseline, 0.5f, 2.0f);
+    Serial.printf("[RUN] ET scaling: ET0=%.2fmm  baseline=%.2fmm  mult=%.2f\n",
+      et0, boardConfig.etBaseline, etMult);
+  }
+
+  // ── Build scaled duration array (used by both run paths) ─
+  int scaledDurations[NUM_ZONES];
+  for (int z = 0; z < NUM_ZONES; z++) {
+    if (sched.durations[z] <= 0) { scaledDurations[z] = 0; continue; }
+    scaledDurations[z] = max(1, (int)roundf(sched.durations[z] * etMult));
+  }
 
   stopRequested = false;
   int actualSecs[NUM_ZONES] = {0};
   {
     int totalMin = 0, zoneCount = 0;
-    xSemaphoreTake(scheduleMutex, portMAX_DELAY);
     for (int z = 0; z < NUM_ZONES; z++) {
-      if (daySched.durations[z] > 0) {
-        totalMin += daySched.durations[z];
-        zoneCount++;
-      }
+      if (scaledDurations[z] > 0) { totalMin += scaledDurations[z]; zoneCount++; }
     }
-    xSemaphoreGive(scheduleMutex);
-    char buf[128];
-    snprintf(buf, sizeof(buf), "\xF0\x9F\x92\xA7 %s run started \xe2\x80\x94 %d zone%s, ~%d min",
-      manual ? "Manual" : "Scheduled", zoneCount, zoneCount == 1 ? "" : "s", totalMin);
+    char buf[160];
+    int pos = snprintf(buf, sizeof(buf), "\xF0\x9F\x92\xA7 %s — %s \xe2\x80\x94 %d zone%s, ~%d min",
+      manual ? "Manual" : "Scheduled", sched.name,
+      zoneCount, zoneCount == 1 ? "" : "s", totalMin);
+    if (boardConfig.etScalingEnabled && etMult != 1.0f)
+      snprintf(buf + pos, sizeof(buf) - pos, " (ET \xc3\x97%.0f%%)", etMult * 100.0f);
     telegramNotify(buf);
   }
 
@@ -552,7 +576,7 @@ void runSequenceTask(void* param) {
     int remaining[NUM_ZONES];
     int activeCount = 0;
     for (int z = 0; z < NUM_ZONES; z++) {
-      remaining[z] = daySched.durations[z] * 60;
+      remaining[z] = scaledDurations[z] * 60;
       if (remaining[z] > 0) activeCount++;
     }
 
@@ -579,7 +603,7 @@ void runSequenceTask(void* param) {
         while (elapsed < thisRun && !stopRequested) {
           xSemaphoreTake(statusMutex, portMAX_DELAY);
           runStatus.isRunning     = true;
-          runStatus.dayIndex      = dayIndex;
+          runStatus.scheduleIndex = schedIdx;
           runStatus.activeZone    = z;
           runStatus.remainingTime = remaining[z] - elapsed;
           runStatus.manualRun     = manual;
@@ -599,7 +623,7 @@ void runSequenceTask(void* param) {
           while (soakElapsed < cycleTimeSec && !stopRequested) {
             xSemaphoreTake(statusMutex, portMAX_DELAY);
             runStatus.isRunning     = true;
-            runStatus.dayIndex      = dayIndex;
+            runStatus.scheduleIndex = schedIdx;
             runStatus.activeZone    = -1;
             runStatus.remainingTime = remaining[z];
             runStatus.manualRun     = manual;
@@ -611,25 +635,35 @@ void runSequenceTask(void* param) {
       }
     }
     for (int z = 0; z < NUM_ZONES; z++) {
-      actualSecs[z] = daySched.durations[z] * 60 - remaining[z];
+      actualSecs[z] = scaledDurations[z] * 60 - remaining[z];
     }
 
   } else {
-    // ── Standard sequential mode ─────────────────────────
+    // ── Standard sequential mode with 2-second zone overlap ─
+    bool overlapStarted[NUM_ZONES] = {false};
+
     for (int z = 0; z < NUM_ZONES; z++) {
       if (stopRequested) {
         Serial.println("[RUN] Stop requested, halting sequence");
         break;
       }
 
-      int durMin = daySched.durations[z];
+      int durMin = scaledDurations[z];
       if (durMin <= 0) {
         Serial.printf("[RUN] Zone %d skipped (duration=0)\n", z + 1);
         continue;
       }
 
-      Serial.printf("[RUN] Zone %d ON for %d min\n", z + 1, durMin);
-      RELAY_ON(RELAY_PINS[z]);
+      // Find next active zone for overlap handoff
+      int nextZ = -1;
+      for (int nz = z + 1; nz < NUM_ZONES; nz++) {
+        if (scaledDurations[nz] > 0) { nextZ = nz; break; }
+      }
+
+      if (!overlapStarted[z]) {
+        Serial.printf("[RUN] Zone %d ON for %d min\n", z + 1, durMin);
+        RELAY_ON(RELAY_PINS[z]);
+      }
       int rem = durMin * 60;
 
       while (rem > 0) {
@@ -637,9 +671,15 @@ void runSequenceTask(void* param) {
           Serial.printf("[RUN] Stop during zone %d\n", z + 1);
           break;
         }
+        // Start next zone 2 seconds before this one ends
+        if (rem == 2 && nextZ != -1 && !overlapStarted[nextZ]) {
+          RELAY_ON(RELAY_PINS[nextZ]);
+          overlapStarted[nextZ] = true;
+          Serial.printf("[RUN] Zone %d ON (overlap start)\n", nextZ + 1);
+        }
         xSemaphoreTake(statusMutex, portMAX_DELAY);
         runStatus.isRunning     = true;
-        runStatus.dayIndex      = dayIndex;
+        runStatus.scheduleIndex = schedIdx;
         runStatus.activeZone    = z;
         runStatus.remainingTime = rem;
         runStatus.manualRun     = manual;
@@ -659,7 +699,7 @@ void runSequenceTask(void* param) {
 
   xSemaphoreTake(statusMutex, portMAX_DELAY);
   runStatus.isRunning     = false;
-  runStatus.dayIndex      = -1;
+  runStatus.scheduleIndex = -1;
   runStatus.activeZone    = -1;
   runStatus.remainingTime = 0;
   runStatus.manualRun     = false;
@@ -672,10 +712,13 @@ void runSequenceTask(void* param) {
     for (int z = 0; z < NUM_ZONES; z++) {
       if (actualSecs[z] > 0) { logZ[logCount] = z; logS[logCount] = actualSecs[z]; logCount++; }
     }
-    appendRunLog(ts, manual ? "manual" : "schedule", logZ, logS, logCount, nullptr);
+    char trigger[48];
+    if (manual) strlcpy(trigger, "manual", sizeof(trigger));
+    else        snprintf(trigger, sizeof(trigger), "%s", sched.name);
+    appendRunLog(ts, trigger, logZ, logS, logCount, nullptr);
     {
       char buf[384];
-      int pos = snprintf(buf, sizeof(buf), "\xe2\x9c\x85 Run complete");
+      int pos = snprintf(buf, sizeof(buf), "\xe2\x9c\x85 %s complete", sched.name);
       int totalSec = 0;
       for (int i = 0; i < logCount; i++) {
         pos += snprintf(buf + pos, sizeof(buf) - pos, "\n%s \xe2\x80\x94 %dm",
@@ -717,7 +760,7 @@ void runSingleZoneTask(void* p) {
       while (elapsed < thisRun && !stopRequested) {
         xSemaphoreTake(statusMutex, portMAX_DELAY);
         runStatus.isRunning     = true;
-        runStatus.dayIndex      = -1;
+        runStatus.scheduleIndex = -1;
         runStatus.activeZone    = z;
         runStatus.remainingTime = totalRemaining - elapsed;
         runStatus.manualRun     = true;
@@ -735,7 +778,7 @@ void runSingleZoneTask(void* p) {
         while (soakElapsed < cycleTimeSec && !stopRequested) {
           xSemaphoreTake(statusMutex, portMAX_DELAY);
           runStatus.isRunning     = true;
-          runStatus.dayIndex      = -1;
+          runStatus.scheduleIndex = -1;
           runStatus.activeZone    = -1;
           runStatus.remainingTime = totalRemaining;
           runStatus.manualRun     = true;
@@ -752,7 +795,7 @@ void runSingleZoneTask(void* p) {
     while (remaining > 0 && !stopRequested) {
       xSemaphoreTake(statusMutex, portMAX_DELAY);
       runStatus.isRunning     = true;
-      runStatus.dayIndex      = -1;
+      runStatus.scheduleIndex = -1;
       runStatus.activeZone    = z;
       runStatus.remainingTime = remaining;
       runStatus.manualRun     = true;
@@ -784,15 +827,22 @@ void runSingleZoneTask(void* p) {
   vTaskDelete(NULL);
 }
 
-bool startSequence(int dayIndex, bool manual = false) {
+bool startSequence(int scheduleIndex, bool manual = false) {
   xSemaphoreTake(statusMutex, portMAX_DELAY);
   bool alreadyRunning = runStatus.isRunning;
+  if (!alreadyRunning) runStatus.isRunning = true; // claim slot synchronously
   xSemaphoreGive(statusMutex);
 
   if (alreadyRunning) return false;
 
-  RunArgs* args = new RunArgs{dayIndex, manual};
-  xTaskCreate(runSequenceTask, "sprinkler_run", 4096, args, 1, NULL);
+  RunArgs* args = new RunArgs{scheduleIndex, manual};
+  if (xTaskCreate(runSequenceTask, "sprinkler_run", 8192, args, 1, NULL) != pdPASS) {
+    xSemaphoreTake(statusMutex, portMAX_DELAY);
+    runStatus.isRunning = false; // revert if task spawn failed
+    xSemaphoreGive(statusMutex);
+    delete args;
+    return false;
+  }
   return true;
 }
 
@@ -803,65 +853,57 @@ void scheduleCheckerTask(void* param) {
   Serial.println("[SCHED] Checker task started");
 
   while (true) {
-    vTaskDelay(pdMS_TO_TICKS(15000)); // Check every 15 seconds
+    vTaskDelay(pdMS_TO_TICKS(15000)); // check every 15 seconds
 
     if (!isNtpSynced()) continue;
-
-    xSemaphoreTake(scheduleMutex, portMAX_DELAY);
-    bool enabled = schedule.enabled;
-    xSemaphoreGive(scheduleMutex);
-
-    if (!enabled) continue;
+    if (!schedulingEnabled) continue;
 
     time_t now = time(nullptr);
     struct tm* t = localtime(&now);
 
-    // tm_wday: 0=Sunday, 1=Monday...6=Saturday
-    // We store: 0=Monday...6=Sunday (matching Python weekday())
-    int dayIndex = (t->tm_wday == 0) ? 6 : t->tm_wday - 1;
-    int hour     = t->tm_hour;
-    int minute   = t->tm_min;
+    // tm_wday: 0=Sunday … 6=Saturday; we store 0=Monday … 6=Sunday
+    int dayIdx = (t->tm_wday == 0) ? 6 : t->tm_wday - 1;
+    int hour   = t->tm_hour;
+    int minute = t->tm_min;
 
-    // Prevent firing more than once per minute
-    if (dayIndex == lastScheduledDay && minute == lastScheduledMinute) continue;
+    for (int s = 0; s < NUM_SCHEDULES; s++) {
+      xSemaphoreTake(scheduleMutex, portMAX_DELAY);
+      Schedule sched = schedules[s];
+      xSemaphoreGive(scheduleMutex);
 
-    xSemaphoreTake(scheduleMutex, portMAX_DELAY);
-    DaySchedule day = schedule.days[dayIndex];
-    xSemaphoreGive(scheduleMutex);
+      if (!sched.enabled) continue;
+      if (!sched.days[dayIdx]) continue;
+      if (sched.hour != hour || sched.minute != minute) continue;
+      if (lastFiredDay[s] == dayIdx && lastFiredMin[s] == minute) continue;
 
-    if (day.isActive && day.hour == hour && day.minute == minute) {
-      lastScheduledDay    = dayIndex;
-      lastScheduledMinute = minute;
+      lastFiredDay[s] = dayIdx;
+      lastFiredMin[s] = minute;
 
       if (skipNextScheduledRun) {
         skipNextScheduledRun = false;
-        Serial.println("[SCHED] Run skipped by user command");
-        appendRunLog(now, "schedule", nullptr, nullptr, 0, "user skip");
+        Serial.printf("[SCHED] %s skipped by user command\n", sched.name);
+        appendRunLog(now, sched.name, nullptr, nullptr, 0, "user skip");
         telegramNotify("\xe2\x8f\xad Scheduled run skipped by user request.");
-        lastScheduledDay    = dayIndex;
-        lastScheduledMinute = minute;
-        continue;
+        break; // only need to skip once per tick
       }
+
       const char* skipReason = shouldSkipForWeather();
       if (skipReason) {
         xSemaphoreTake(weatherMutex, portMAX_DELAY);
-        int   rainToday  = weatherCache.rainProb[0];
-        int   rainTomrw  = weatherCache.rainProb[1];
-        float minTemp    = weatherCache.loTemps[0];
+        int   rainToday = weatherCache.rainProb[0];
+        int   rainTomrw = weatherCache.rainProb[1];
+        float minTemp   = weatherCache.loTemps[0];
         xSemaphoreGive(weatherMutex);
-        Serial.printf("[SCHED] Run SKIPPED — %s (rain today: %d%%, rain tomorrow: %d%%, min: %.1f°C)\n",
-          skipReason, rainToday, rainTomrw, minTemp);
-        appendRunLog(now, "schedule", nullptr, nullptr, 0, skipReason);
-        {
-          char buf[128];
-          snprintf(buf, sizeof(buf), "\xe2\x8f\xad Run skipped \xe2\x80\x94 %s", skipReason);
-          telegramNotify(buf);
-        }
+        Serial.printf("[SCHED] %s SKIPPED — %s (rain: %d%%, %d%%, min: %.1f°C)\n",
+          sched.name, skipReason, rainToday, rainTomrw, minTemp);
+        appendRunLog(now, sched.name, nullptr, nullptr, 0, skipReason);
+        char buf[128];
+        snprintf(buf, sizeof(buf), "\xe2\x8f\xad %s skipped \xe2\x80\x94 %s", sched.name, skipReason);
+        telegramNotify(buf);
       } else {
-        Serial.printf("[SCHED] Scheduled run: %s %02d:%02d\n",
-          (const char*[]){"Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"}[dayIndex],
-          hour, minute);
-        startSequence(dayIndex, false);
+        Serial.printf("[SCHED] Firing %s at %02d:%02d\n", sched.name, hour, minute);
+        startSequence(s, false);
+        break; // only one sequence can run at a time
       }
     }
   }
@@ -873,11 +915,11 @@ void scheduleCheckerTask(void* param) {
 String buildStatusJson() {
   DynamicJsonDocument doc(256);
   xSemaphoreTake(statusMutex, portMAX_DELAY);
-  doc["is_running"]     = runStatus.isRunning;
-  doc["day_index"]      = runStatus.dayIndex;
+  doc["is_running"]       = runStatus.isRunning;
+  doc["schedule_index"]   = runStatus.scheduleIndex;
   doc["active_sprinkler"] = runStatus.activeZone;
-  doc["remaining_time"] = runStatus.remainingTime;
-  doc["manual_run"]     = runStatus.manualRun;
+  doc["remaining_time"]   = runStatus.remainingTime;
+  doc["manual_run"]       = runStatus.manualRun;
   xSemaphoreGive(statusMutex);
   String out;
   serializeJson(doc, out);
@@ -885,19 +927,20 @@ String buildStatusJson() {
 }
 
 String buildScheduleJson() {
-  DynamicJsonDocument doc(4096);
+  DynamicJsonDocument doc(8192);
   xSemaphoreTake(scheduleMutex, portMAX_DELAY);
-  doc["enabled"] = schedule.enabled;
-  JsonArray days = doc.createNestedArray("schedule");
-  for (int d = 0; d < 7; d++) {
-    JsonObject day = days.createNestedObject();
-    day["is_active"] = schedule.days[d].isActive;
-    day["hour"]      = schedule.days[d].hour;
-    day["minute"]    = schedule.days[d].minute;
-    JsonArray durs   = day.createNestedArray("durations");
-    for (int z = 0; z < NUM_ZONES; z++) {
-      durs.add(schedule.days[d].durations[z]);
-    }
+  doc["enabled"] = schedulingEnabled;
+  JsonArray arr  = doc.createNestedArray("schedules");
+  for (int s = 0; s < NUM_SCHEDULES; s++) {
+    JsonObject o = arr.createNestedObject();
+    o["name"]    = schedules[s].name;
+    o["enabled"] = schedules[s].enabled;
+    o["hour"]    = schedules[s].hour;
+    o["minute"]  = schedules[s].minute;
+    JsonArray daysArr = o.createNestedArray("days");
+    for (int d = 0; d < 7; d++) daysArr.add(schedules[s].days[d]);
+    JsonArray durs = o.createNestedArray("durations");
+    for (int z = 0; z < NUM_ZONES; z++) durs.add(schedules[s].durations[z]);
   }
   xSemaphoreGive(scheduleMutex);
   String out;
@@ -913,7 +956,7 @@ String buildSystemInfoJson() {
   strftime(timeBuf, sizeof(timeBuf), "%Y-%m-%d %H:%M:%S", t);
 
   doc["current_time"]      = timeBuf;
-  doc["schedule_enabled"]  = schedule.enabled;
+  doc["schedule_enabled"]  = schedulingEnabled;
   doc["ip_address"]        = WiFi.localIP().toString();
   doc["hostname"]          = HOSTNAME;
   doc["num_zones"]         = NUM_ZONES;
@@ -921,6 +964,8 @@ String buildSystemInfoJson() {
   doc["timezone"]          = boardConfig.timezone;
   doc["uptime_sec"]        = millis() / 1000;
   doc["free_heap"]         = ESP.getFreeHeap();
+  doc["ssid"]              = WiFi.SSID();
+  doc["rssi"]              = WiFi.RSSI();
 
   JsonArray pins = doc.createNestedArray("relay_pins");
   for (int i = 0; i < NUM_ZONES; i++) pins.add(RELAY_PINS[i]);
@@ -1038,19 +1083,183 @@ void handleTelegramSkip() {
   telegramSend("\xe2\x8f\xad Next scheduled run will be skipped.");
 }
 
+void handleTelegramSchedules() {
+  const char* dayAbbr[] = {"Mon","Tue","Wed","Thu","Fri","Sat","Sun"};
+  char buf[640];
+  int pos = snprintf(buf, sizeof(buf), "\xF0\x9F\x93\x85 Schedules (%s):\n",
+    schedulingEnabled ? "on" : "PAUSED");
+  for (int s = 0; s < NUM_SCHEDULES; s++) {
+    xSemaphoreTake(scheduleMutex, portMAX_DELAY);
+    Schedule sched = schedules[s];
+    xSemaphoreGive(scheduleMutex);
+    if (!sched.enabled) {
+      pos += snprintf(buf + pos, sizeof(buf) - pos, "%d. %s \xe2\x80\x94 disabled\n", s + 1, sched.name);
+      continue;
+    }
+    char dayStr[32] = ""; int dp = 0;
+    for (int d = 0; d < 7; d++) if (sched.days[d]) dp += snprintf(dayStr + dp, sizeof(dayStr) - dp, "%s ", dayAbbr[d]);
+    if (dp == 0) strlcpy(dayStr, "no days", sizeof(dayStr));
+    int h12 = sched.hour % 12; if (h12 == 0) h12 = 12;
+    const char* ampm = sched.hour >= 12 ? "PM" : "AM";
+    pos += snprintf(buf + pos, sizeof(buf) - pos, "%d. %s \xe2\x80\x94 %d:%02d%s \xe2\x80\x94 %s\n",
+      s + 1, sched.name, h12, sched.minute, ampm, dayStr);
+  }
+  telegramSend(buf);
+}
+
+void handleTelegramWeatherCmd() {
+  xSemaphoreTake(weatherMutex, portMAX_DELAY);
+  bool  valid = weatherCache.valid;
+  float temp  = weatherCache.currentTemp;
+  int   rain  = weatherCache.rainProb[0];
+  float et0   = weatherCache.et0[0];
+  xSemaphoreGive(weatherMutex);
+  if (!valid) { telegramSend("No weather data yet. Set location in Settings."); return; }
+  float disp = (boardConfig.tempUnit[0] == 'F') ? temp * 9.0f / 5.0f + 32.0f : temp;
+  char buf[256];
+  int pos = snprintf(buf, sizeof(buf), "\xF0\x9F\x8C\xa4 %.1f\xc2\xb0%s  Rain: %d%%\n\xF0\x9F\x92\xa7 ET\xe2\x82\x80 today: %.1fmm",
+    disp, boardConfig.tempUnit, rain, et0);
+  if (boardConfig.etScalingEnabled && et0 > 0.0f && boardConfig.etBaseline > 0.0f) {
+    float mult = constrain(et0 / boardConfig.etBaseline, 0.5f, 2.0f);
+    snprintf(buf + pos, sizeof(buf) - pos, " \xe2\x86\x92 %.0f%% duration", mult * 100.0f);
+  }
+  telegramSend(buf);
+}
+
+void handleTelegramNext() {
+  if (!schedulingEnabled) { telegramSend("Scheduling is disabled."); return; }
+  time_t now = time(nullptr);
+  struct tm* t = localtime(&now);
+  int curDay  = (t->tm_wday == 0) ? 6 : t->tm_wday - 1;
+  int curHour = t->tm_hour;
+  int curMin  = t->tm_min;
+  const char* dayNames[] = {"Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"};
+
+  int bestOffset = 999, bestSched = -1, bestDay = -1;
+  for (int s = 0; s < NUM_SCHEDULES; s++) {
+    xSemaphoreTake(scheduleMutex, portMAX_DELAY);
+    Schedule sched = schedules[s];
+    xSemaphoreGive(scheduleMutex);
+    if (!sched.enabled) continue;
+    for (int offset = 0; offset < 7; offset++) {
+      int d = (curDay + offset) % 7;
+      if (!sched.days[d]) continue;
+      if (offset == 0) {
+        if (sched.hour < curHour || (sched.hour == curHour && sched.minute <= curMin)) continue;
+      }
+      if (offset < bestOffset || (offset == bestOffset && bestSched >= 0 &&
+          (sched.hour < schedules[bestSched].hour ||
+           (sched.hour == schedules[bestSched].hour && sched.minute < schedules[bestSched].minute)))) {
+        bestOffset = offset; bestSched = s; bestDay = d;
+      }
+      break;
+    }
+  }
+  if (bestSched < 0) { telegramSend("No upcoming scheduled runs."); return; }
+  xSemaphoreTake(scheduleMutex, portMAX_DELAY);
+  Schedule sched = schedules[bestSched];
+  xSemaphoreGive(scheduleMutex);
+  int h12 = sched.hour % 12; if (h12 == 0) h12 = 12;
+  const char* ampm = sched.hour >= 12 ? "PM" : "AM";
+  char buf[128];
+  if (bestOffset == 0)
+    snprintf(buf, sizeof(buf), "\xF0\x9F\x93\x85 Next: %s at %d:%02d%s (today)", sched.name, h12, sched.minute, ampm);
+  else if (bestOffset == 1)
+    snprintf(buf, sizeof(buf), "\xF0\x9F\x93\x85 Next: %s at %d:%02d%s (tomorrow, %s)", sched.name, h12, sched.minute, ampm, dayNames[bestDay]);
+  else
+    snprintf(buf, sizeof(buf), "\xF0\x9F\x93\x85 Next: %s at %d:%02d%s (%s)", sched.name, h12, sched.minute, ampm, dayNames[bestDay]);
+  telegramSend(buf);
+}
+
+void handleTelegramLog() {
+  if (!LittleFS.exists(RUN_LOG_FILE)) { telegramSend("No run history yet."); return; }
+  File f = LittleFS.open(RUN_LOG_FILE, "r");
+  if (!f) { telegramSend("Could not read history."); return; }
+  DynamicJsonDocument doc(8192);
+  deserializeJson(doc, f);
+  f.close();
+  JsonArray arr = doc.as<JsonArray>();
+  int n = arr.size();
+  if (n == 0) { telegramSend("No run history yet."); return; }
+  char buf[512];
+  int pos = snprintf(buf, sizeof(buf), "\xF0\x9F\x93\x8b Recent runs:\n");
+  int start = max(0, n - 3);
+  for (int i = start; i < n; i++) {
+    JsonObject entry = arr[i];
+    time_t ts = entry["ts"].as<long>();
+    struct tm* tm_ = localtime(&ts);
+    const char* trigger  = entry["trigger"] | "?";
+    const char* skipStr  = entry["skip"]    | "";
+    char timeBuf[20];
+    strftime(timeBuf, sizeof(timeBuf), "%b %d %H:%M", tm_);
+    if (strlen(skipStr) > 0) {
+      pos += snprintf(buf + pos, sizeof(buf) - pos, "%s \xe2\x80\x94 skipped (%s)\n", timeBuf, skipStr);
+    } else {
+      int totalSec = 0;
+      for (JsonObject z : entry["zones"].as<JsonArray>()) totalSec += z["sec"].as<int>();
+      pos += snprintf(buf + pos, sizeof(buf) - pos, "%s \xe2\x80\x94 %s \xe2\x80\x94 %dm\n", timeBuf, trigger, totalSec / 60);
+    }
+  }
+  telegramSend(buf);
+}
+
+void handleTelegramZones() {
+  char buf[384];
+  int pos = snprintf(buf, sizeof(buf), "\xF0\x9F\x92\xa7 Zones:\n");
+  for (int z = 0; z < NUM_ZONES; z++)
+    pos += snprintf(buf + pos, sizeof(buf) - pos, "%d. %s\n", z + 1, boardConfig.zoneNames[z]);
+  telegramSend(buf);
+}
+
+void handleTelegramRunScheduleCmd(const char* args) {
+  int schedNum = atoi(args);
+  if (schedNum < 1 || schedNum > NUM_SCHEDULES) {
+    char err[80];
+    snprintf(err, sizeof(err), "Usage: /schedule 1\xe2\x80\x93%d", NUM_SCHEDULES);
+    telegramSend(err);
+    return;
+  }
+  int s = schedNum - 1;
+  xSemaphoreTake(statusMutex, portMAX_DELAY);
+  bool running = runStatus.isRunning;
+  xSemaphoreGive(statusMutex);
+  if (running) { telegramSend("A run is already in progress. Send /stop first."); return; }
+  xSemaphoreTake(scheduleMutex, portMAX_DELAY);
+  bool hasZones = false;
+  for (int z = 0; z < NUM_ZONES; z++) if (schedules[s].durations[z] > 0) { hasZones = true; break; }
+  xSemaphoreGive(scheduleMutex);
+  if (!hasZones) { telegramSend("That schedule has no zones configured."); return; }
+  startSequence(s, true);
+}
+
 void handleTelegramCommand(const char* text) {
-  if (strncmp(text, "/status", 7) == 0)     { handleTelegramStatus(); }
-  else if (strncmp(text, "/run ", 5) == 0)  { handleTelegramRun(text + 5); }
-  else if (strncmp(text, "/stop", 5) == 0)  { handleTelegramStop(); }
-  else if (strncmp(text, "/skip", 5) == 0)  { handleTelegramSkip(); }
+  if (strncmp(text, "/status", 7) == 0)       { handleTelegramStatus(); }
+  else if (strncmp(text, "/run ", 5) == 0)    { handleTelegramRun(text + 5); }
+  else if (strncmp(text, "/stop", 5) == 0)    { handleTelegramStop(); }
+  else if (strncmp(text, "/skip", 5) == 0)    { handleTelegramSkip(); }
+  else if (strncmp(text, "/schedules", 10) == 0) { handleTelegramSchedules(); }
+  else if (strncmp(text, "/schedule ", 10) == 0) { handleTelegramRunScheduleCmd(text + 10); }
+  else if (strncmp(text, "/weather", 8) == 0) { handleTelegramWeatherCmd(); }
+  else if (strncmp(text, "/next", 5) == 0)    { handleTelegramNext(); }
+  else if (strncmp(text, "/log", 4) == 0)     { handleTelegramLog(); }
+  else if (strncmp(text, "/zones", 6) == 0)   { handleTelegramZones(); }
+  else if (strncmp(text, "/pause", 6) == 0)   { skipNextScheduledRun = true;  telegramSend("\xe2\x8f\xb8 Scheduling paused for next run."); }
+  else if (strncmp(text, "/resume", 7) == 0)  { skipNextScheduledRun = false; telegramSend("\xe2\x96\xb6 Scheduling resumed."); }
   else if (strncmp(text, "/help", 5) == 0) {
     telegramSend(
       "SprinKlr-8 Commands:\n"
       "/status \xe2\x80\x94 weather + run state\n"
-      "/run <zone> <min> \xe2\x80\x94 start a zone (e.g. /run 3 10)\n"
-      "/skip \xe2\x80\x94 skip next scheduled run\n"
+      "/run <zone> <min> \xe2\x80\x94 run a zone\n"
+      "/schedule 1\xe2\x80\x934 \xe2\x80\x94 start a schedule\n"
+      "/schedules \xe2\x80\x94 list all schedules\n"
+      "/weather \xe2\x80\x94 conditions + ET0\n"
+      "/next \xe2\x80\x94 next scheduled run\n"
+      "/log \xe2\x80\x94 last 3 runs\n"
+      "/zones \xe2\x80\x94 zone names\n"
+      "/pause \xe2\x80\x94 skip next run\n"
+      "/resume \xe2\x80\x94 resume scheduling\n"
       "/stop \xe2\x80\x94 stop current run\n"
-      "/help \xe2\x80\x94 show this list"
+      "/help \xe2\x80\x94 this list"
     );
   }
   else { telegramSend("Unknown command. Send /help for the list."); }
@@ -1139,33 +1348,29 @@ void setupRoutes() {
       server.send(400, "application/json", "{\"error\":\"No body\"}");
       return;
     }
-    DynamicJsonDocument doc(4096);
+    DynamicJsonDocument doc(8192);
     DeserializationError err = deserializeJson(doc, server.arg("plain"));
     if (err) {
       server.send(400, "application/json", "{\"error\":\"Invalid JSON\"}");
       return;
     }
-    if (!doc.is<JsonArray>()) {
-      server.send(400, "application/json", "{\"error\":\"Expected JSON array of 7 days\"}");
-      return;
-    }
-    JsonArray arr = doc.as<JsonArray>();
-    if (arr.size() != 7) {
-      server.send(400, "application/json", "{\"error\":\"Schedule must have exactly 7 days\"}");
-      return;
-    }
 
     xSemaphoreTake(scheduleMutex, portMAX_DELAY);
-    for (int d = 0; d < 7; d++) {
-      JsonObject day = arr[d];
-      schedule.days[d].isActive = day["is_active"].as<bool>();
-      // Use explicit containsKey checks so hour=0 (midnight) is handled correctly
-      schedule.days[d].hour   = day.containsKey("hour")   ? (int)day["hour"]   : 7;
-      schedule.days[d].minute = day.containsKey("minute") ? (int)day["minute"] : 0;
-      JsonArray durs = day["durations"].as<JsonArray>();
-      for (int z = 0; z < NUM_ZONES && z < (int)durs.size(); z++) {
-        schedule.days[d].durations[z] = (int)durs[z];
-      }
+    if (doc.containsKey("enabled")) schedulingEnabled = doc["enabled"].as<bool>();
+    JsonArray arr = doc["schedules"].as<JsonArray>();
+    for (int s = 0; s < NUM_SCHEDULES && s < (int)arr.size(); s++) {
+      JsonObject o = arr[s];
+      const char* nm = o["name"] | "";
+      if (strlen(nm) > 0) strlcpy(schedules[s].name, nm, sizeof(schedules[s].name));
+      schedules[s].enabled = o["enabled"] | schedules[s].enabled;
+      if (o.containsKey("hour"))   schedules[s].hour   = (int)o["hour"];
+      if (o.containsKey("minute")) schedules[s].minute = (int)o["minute"];
+      JsonArray daysArr = o["days"].as<JsonArray>();
+      for (int d = 0; d < 7 && d < (int)daysArr.size(); d++)
+        schedules[s].days[d] = daysArr[d].as<bool>();
+      JsonArray durs = o["durations"].as<JsonArray>();
+      for (int z = 0; z < NUM_ZONES && z < (int)durs.size(); z++)
+        schedules[s].durations[z] = (int)durs[z];
     }
     xSemaphoreGive(scheduleMutex);
 
@@ -1173,20 +1378,20 @@ void setupRoutes() {
     server.send(200, "application/json", "{\"message\":\"Schedule updated\"}");
   });
 
-  // ── POST /api/run_day  body: {"day": 0-6} ────────────────────
-  server.on("/api/run_day", HTTP_POST, []() {
+  // ── POST /api/run_schedule  body: {"schedule": 0-3} ─────────
+  server.on("/api/run_schedule", HTTP_POST, []() {
     if (!server.hasArg("plain")) {
       server.send(400, "application/json", "{\"error\":\"No body\"}");
       return;
     }
     DynamicJsonDocument doc(64);
     deserializeJson(doc, server.arg("plain"));
-    int dayIndex = doc["day"] | -1;
-    if (dayIndex < 0 || dayIndex > 6) {
-      server.send(400, "application/json", "{\"error\":\"day must be 0-6\"}");
+    int schedIdx = doc["schedule"] | -1;
+    if (schedIdx < 0 || schedIdx >= NUM_SCHEDULES) {
+      server.send(400, "application/json", "{\"error\":\"schedule must be 0-3\"}");
       return;
     }
-    if (startSequence(dayIndex, true)) {
+    if (startSequence(schedIdx, true)) {
       server.send(200, "application/json", "{\"message\":\"Sequence started\"}");
     } else {
       server.send(409, "application/json", "{\"error\":\"A sequence is already running\"}");
@@ -1244,8 +1449,8 @@ void setupRoutes() {
   // ── POST /api/toggle_schedule ─────────────────────────────────
   server.on("/api/toggle_schedule", HTTP_POST, []() {
     xSemaphoreTake(scheduleMutex, portMAX_DELAY);
-    schedule.enabled = !schedule.enabled;
-    bool newState = schedule.enabled;
+    schedulingEnabled = !schedulingEnabled;
+    bool newState = schedulingEnabled;
     xSemaphoreGive(scheduleMutex);
 
     saveSchedule();
@@ -1277,9 +1482,11 @@ void setupRoutes() {
     doc["cycle_time"]             = boardConfig.cycleTime;
     doc["temp_unit"]              = boardConfig.tempUnit;
     { JsonArray zn = doc.createNestedArray("zone_names"); for (int i = 0; i < 8; i++) zn.add(boardConfig.zoneNames[i]); }
-    doc["telegram_enabled"]  = boardConfig.telegramEnabled;
-    doc["telegram_token"]    = boardConfig.telegramToken;
-    doc["telegram_chat_id"]  = boardConfig.telegramChatId;
+    doc["telegram_enabled"]   = boardConfig.telegramEnabled;
+    doc["telegram_token"]     = boardConfig.telegramToken;
+    doc["telegram_chat_id"]   = boardConfig.telegramChatId;
+    doc["et_scaling_enabled"] = boardConfig.etScalingEnabled;
+    doc["et_baseline"]        = boardConfig.etBaseline;
     String out; serializeJson(doc, out);
     server.send(200, "application/json", out);
   });
@@ -1326,6 +1533,8 @@ void setupRoutes() {
       const char* v = doc["telegram_chat_id"].as<const char*>();
       if (v) strlcpy(boardConfig.telegramChatId, v, sizeof(boardConfig.telegramChatId));
     }
+    if (doc.containsKey("et_scaling_enabled")) boardConfig.etScalingEnabled = doc["et_scaling_enabled"].as<bool>();
+    if (doc.containsKey("et_baseline"))        boardConfig.etBaseline       = doc["et_baseline"].as<float>();
     // Notify weatherTask to refetch immediately when location or skip toggle changes
     bool locationChanged = doc.containsKey("latitude") || doc.containsKey("longitude") || doc.containsKey("weather_enabled");
     saveConfig();
@@ -1351,6 +1560,7 @@ void setupRoutes() {
     doc["rain_prob_today"]    = weatherCache.rainProb[0];
     doc["rain_prob_tomorrow"] = weatherCache.rainProb[1];
     doc["fetched_ago_sec"]    = weatherCache.valid ? (long)((millis() - weatherCache.fetchedAt) / 1000) : -1;
+    doc["et0_today"] = weatherCache.et0[0];
     JsonArray forecast = doc.createNestedArray("forecast");
     for (int i = 0; i < 5; i++) {
       JsonObject day = forecast.createNestedObject();
@@ -1358,12 +1568,15 @@ void setupRoutes() {
       day["lo"]   = weatherCache.loTemps[i];
       day["rain"] = weatherCache.rainProb[i];
       day["code"] = weatherCache.codes[i];
+      day["et0"]  = weatherCache.et0[i];
     }
     xSemaphoreGive(weatherMutex);
-    doc["weather_enabled"]  = boardConfig.weatherEnabled;
-    doc["rain_threshold"]   = boardConfig.rainThreshold;
-    doc["freeze_threshold"] = boardConfig.freezeThreshold;
-    doc["temp_unit"]        = boardConfig.tempUnit;
+    doc["weather_enabled"]    = boardConfig.weatherEnabled;
+    doc["rain_threshold"]     = boardConfig.rainThreshold;
+    doc["freeze_threshold"]   = boardConfig.freezeThreshold;
+    doc["temp_unit"]          = boardConfig.tempUnit;
+    doc["et_scaling_enabled"] = boardConfig.etScalingEnabled;
+    doc["et_baseline"]        = boardConfig.etBaseline;
     String out; serializeJson(doc, out);
     server.send(200, "application/json", out);
   });
@@ -1808,9 +2021,9 @@ void setup() {
   // WiFi (fallback / normal connect after Improv or on subsequent boots)
   setupWiFi();
 
-  // NTP — use ESP32 built-in SNTP (handles DST automatically via POSIX tz string)
-  applyTimezone();
-  configTime(0, 0, NTP_SERVER);   // always fetch UTC; localtime() applies the TZ offset
+  // NTP — configTime() internally sets TZ to UTC, so we call applyTimezone() AFTER it
+  configTime(0, 0, NTP_SERVER);   // sync NTP first (sets TZ to UTC internally)
+  applyTimezone();                 // re-apply saved POSIX TZ so it persists across reboots
   Serial.println("[BOOT] Waiting for NTP sync...");
   {
     int retries = 0;

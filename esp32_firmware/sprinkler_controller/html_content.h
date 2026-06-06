@@ -250,6 +250,7 @@ select:focus, input[type="number"]:focus { outline: none; border-color: #4fc3f7;
       <div style="display:flex;flex-direction:column;gap:4px;font-size:0.85rem">
         <span>🌧 Today: <strong id="wx-rain-today">--%</strong> &nbsp; Tomorrow: <strong id="wx-rain-tomorrow">--%</strong></span>
         <span>🌡 Min today: <strong id="wx-min-temp">--°C</strong></span>
+        <span id="wx-et0-row" style="display:none">💧 ET₀: <strong id="wx-et0-val">--</strong> mm</span>
       </div>
     </div>
     <div id="wx-skip-warn" style="display:none;margin-top:8px;padding:6px 10px;background:#1a3a5c;border-radius:6px;color:#ffb74d;font-size:0.85rem"></div>
@@ -297,17 +298,15 @@ select:focus, input[type="number"]:focus { outline: none; border-color: #4fc3f7;
   </div>
 
   <div class="card">
-    <div class="sec-title" style="margin-bottom:14px">Run Day Sequence</div>
+    <div class="sec-title" style="margin-bottom:14px">Run Schedule</div>
     <div class="form-group">
-      <label>Day</label>
-      <select id="manualDay">
-        <option value="0">Monday</option><option value="1">Tuesday</option>
-        <option value="2">Wednesday</option><option value="3">Thursday</option>
-        <option value="4">Friday</option><option value="5">Saturday</option>
-        <option value="6">Sunday</option>
+      <label>Schedule</label>
+      <select id="manualSched">
+        <option value="0">Schedule 1</option><option value="1">Schedule 2</option>
+        <option value="2">Schedule 3</option><option value="3">Schedule 4</option>
       </select>
     </div>
-    <button class="btn-full btn-blue" onclick="runDaySeq()">▶ Run Day Sequence</button>
+    <button class="btn-full btn-blue" onclick="runSchedSeq()">▶ Run Schedule</button>
   </div>
 
   <button class="btn-full btn-red" onclick="stopAll()">■ Stop All</button>
@@ -412,6 +411,27 @@ select:focus, input[type="number"]:focus { outline: none; border-color: #4fc3f7;
     </div>
     <div class="settings-row">
       <button class="save-btn" onclick="saveWeatherSettings()">Save Weather Settings</button>
+    </div>
+  </div>
+
+  <div class="sec-hdr"><span class="sec-title">ET Scaling</span></div>
+  <div class="settings-section">
+    <div class="settings-row">
+      <span class="settings-label">Enable ET scaling</span>
+      <label class="toggle"><input type="checkbox" id="et-enabled-chk" onchange="saveEtSettings()"><span class="slider"></span></label>
+    </div>
+    <div class="settings-row">
+      <span class="settings-label">Baseline ET₀</span>
+      <div style="display:flex;align-items:center;gap:6px">
+        <input id="et-baseline-inp" type="number" step="0.1" min="0.5" max="20" class="tz-inp" style="width:70px" value="4.0">
+        <span class="settings-val">mm/day</span>
+      </div>
+    </div>
+    <div class="settings-row" style="font-size:0.85rem;color:#607080;padding-top:0">
+      Scales zone run times by today's ET₀ ÷ baseline (capped 50–200%). Requires location to be set.
+    </div>
+    <div class="settings-row">
+      <button class="save-btn" onclick="saveEtSettings()">Save ET Settings</button>
     </div>
   </div>
 
@@ -623,9 +643,9 @@ function to24(h12, m, ampm) {
 let zoneNames = Array.from({length: ZONES}, (_, i) => `Zone ${i+1}`);
 
 // ── Mock data ──────────────────────────────────────────
-let mStat   = {is_running:false,day_index:-1,active_sprinkler:-1,remaining_time:0,manual_run:false};
-let mSched  = {enabled:true, schedule:Array.from({length:7},()=>({is_active:false,hour:7,minute:0,durations:Array(ZONES).fill(10)}))};
-let mInfo   = {ip_address:'10.110.201.40',free_heap:195000,min_free_heap:162000,uptime_sec:5420,ntp_synced:true,current_time:'2026-04-18 07:23:00'};
+let mStat   = {is_running:false,schedule_index:-1,active_sprinkler:-1,remaining_time:0,manual_run:false};
+let mSched  = {enabled:true, schedules:Array.from({length:4},(_,i)=>({name:`Schedule ${i+1}`,enabled:false,days:Array(7).fill(false),hour:7,minute:0,durations:Array(ZONES).fill(0)}))};
+let mInfo   = {ip_address:'10.110.201.40',free_heap:195000,min_free_heap:162000,uptime_sec:5420,ntp_synced:true,current_time:'2026-04-18 07:23:00',ssid:'MyNetwork',rssi:-65};
 let mConfig = {timezone:'UTC0'};
 
 async function GET(p) {
@@ -640,11 +660,11 @@ async function GET(p) {
 async function POST(p,b) {
   if (PREVIEW) {
     if (p==='/api/toggle_schedule') { mSched.enabled=!mSched.enabled; return {enabled:mSched.enabled}; }
-    if (p==='/api/schedule')        { mSched.schedule=b; return {message:'Saved'}; }
+    if (p==='/api/schedule')        { Object.assign(mSched,b); return {message:'Saved'}; }
     if (p==='/api/config')          { mConfig.timezone=b.timezone; return {message:'Config saved'}; }
-    if (p==='/api/stop_sequence')   { mStat={is_running:false,day_index:-1,active_sprinkler:-1,remaining_time:0,manual_run:false}; return {message:'Stopped'}; }
-    if (p==='/api/run_day')         { mStat={is_running:true,day_index:b.day,active_sprinkler:0,remaining_time:600,manual_run:true}; return {message:'Started'}; }
-    if (p==='/api/run_zone')        { mStat={is_running:true,day_index:-1,active_sprinkler:b.zone,remaining_time:b.duration*60,manual_run:true}; return {message:'Started'}; }
+    if (p==='/api/stop_sequence')   { mStat={is_running:false,schedule_index:-1,active_sprinkler:-1,remaining_time:0,manual_run:false}; return {message:'Stopped'}; }
+    if (p==='/api/run_schedule')    { mStat={is_running:true,schedule_index:b.schedule,active_sprinkler:0,remaining_time:600,manual_run:true}; return {message:'Started'}; }
+    if (p==='/api/run_zone')        { mStat={is_running:true,schedule_index:-1,active_sprinkler:b.zone,remaining_time:b.duration*60,manual_run:true}; return {message:'Started'}; }
     return {message:'OK'};
   }
   return (await fetch(p,{method:'POST',headers:{'Content-Type':'application/json'},body:b!==undefined?JSON.stringify(b):undefined})).json();
@@ -676,7 +696,7 @@ function showPage(pg, el) {
   document.getElementById('page-'+pg).classList.add('active');
   if (el) el.classList.add('active');
   if (pg==='status')   pollInfo();
-  if (pg==='settings') { renderZoneNameSettings(); loadTz(); loadWeatherSettings(); loadCycleAndSoak(); loadTelegram(); pollInfo(); }
+  if (pg==='settings') { renderZoneNameSettings(); loadTz(); loadWeatherSettings(); loadEtSettings(); loadCycleAndSoak(); loadTelegram(); pollInfo(); }
   if (pg==='weather')  updateWeatherPage();
   if (pg==='history')  loadHistoryPage();
 }
@@ -753,9 +773,9 @@ function highlightRunningZone(s) {
 
   if (!s.is_running || s.active_sprinkler < 0) return;
 
-  // Highlight card for the running day
-  if (s.day_index >= 0) {
-    const card = document.getElementById('sc'+s.day_index);
+  // Highlight card for the running schedule
+  if (s.schedule_index >= 0) {
+    const card = document.getElementById('sc'+s.schedule_index);
     if (card) card.classList.add('now-running');
   }
 
@@ -790,7 +810,7 @@ async function pollInfo() {
     const i = await GET('/api/system_info');
     if (i.current_time) updateHeaderTime(i.current_time);
     if (document.getElementById('set-ip'))    document.getElementById('set-ip').textContent    = i.ip_address || '—';
-    if (document.getElementById('set-wifi'))  document.getElementById('set-wifi').textContent  = i.ssid       || '—';
+    if (document.getElementById('set-wifi'))  document.getElementById('set-wifi').textContent  = i.ssid ? `${i.ssid} (${i.rssi} dBm)` : '—';
     if (document.getElementById('ss-heap'))   document.getElementById('ss-heap').textContent   = i.free_heap  ? `${Math.round(i.free_heap/1024)}KB`     : '—';
     if (document.getElementById('ss-minheap'))document.getElementById('ss-minheap').textContent= i.min_free_heap ? `${Math.round(i.min_free_heap/1024)}KB` : '—';
     if (document.getElementById('ss-ip'))     document.getElementById('ss-ip').textContent     = i.ip_address || '—';
@@ -810,13 +830,15 @@ async function pollInfo() {
 
 // ── Schedule ───────────────────────────────────────────
 let schedData = null, schedEnabled = true;
+const DAY_ABBR = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
 
 async function loadSchedule() {
   try {
     const d = await GET('/api/schedule');
-    schedData = d.schedule; schedEnabled = d.enabled;
+    schedData = d.schedules; schedEnabled = d.enabled;
     renderSchedule();
     renderSchedTog();
+    updateManualSchedSelect();
     if (lastStatus) highlightRunningZone(lastStatus);
   } catch(e) { toast('Failed to load schedule','err'); }
 }
@@ -826,61 +848,93 @@ function renderSchedule() {
   if (!list || !schedData) return;
   const names = zoneNames;
   list.innerHTML = '';
-  schedData.forEach((day, d) => {
-    const timeDisplay = fmt12(day.hour, day.minute);
-    const h12inp      = day.hour % 12 || 12;
-    const ampmInp     = day.hour >= 12 ? 'PM' : 'AM';
+  schedData.forEach((sched, s) => {
+    const timeDisplay = fmt12(sched.hour, sched.minute);
+    const h12inp      = sched.hour % 12 || 12;
+    const ampmInp     = sched.hour >= 12 ? 'PM' : 'AM';
 
-    // Zone duration rows
+    const dayChecks = DAY_ABBR.map((ab, d) =>
+      `<label style="display:flex;flex-direction:column;align-items:center;gap:3px;font-size:0.75rem;color:#90caf9;cursor:pointer">
+        ${ab}<input type="checkbox" id="sd_${s}_${d}"${sched.days[d]?' checked':''}
+          style="width:16px;height:16px;accent-color:#4fc3f7;cursor:pointer" onchange="togSchedDay(${s},${d})">
+      </label>`).join('');
+
     let zoneRows = '';
     for (let z = 0; z < ZONES; z++) {
       zoneRows += `
-        <div class="zone-dur-row zdrow-${z}" id="zdr_${d}_${z}">
+        <div class="zone-dur-row zdrow-${z}" id="zdr_${s}_${z}">
           <span class="zdr-num">${z+1}</span>
           <span class="zdr-name">${names[z]}</span>
           <div class="zdr-inp-wrap">
-            <input class="zdr-inp" type="number" min="0" max="120" value="${day.durations[z]}" id="dur_${d}_${z}">
+            <input class="zdr-inp" type="number" min="0" max="120" value="${sched.durations[z]}" id="dur_${s}_${z}">
             <span class="zdr-unit">min</span>
           </div>
         </div>`;
     }
 
     const card = document.createElement('div');
-    card.className = `sched-card${day.is_active ? ' on' : ''}`;
-    card.id = `sc${d}`;
+    card.className = `sched-card${sched.enabled ? ' on' : ''}`;
+    card.id = `sc${s}`;
     card.innerHTML = `
-      <div class="sched-card-hdr" onclick="togBody(${d})">
-        <div class="sched-day-name">${DAYS[d]}</div>
-        <div class="sched-time">${timeDisplay}</div>
-        <div class="tog${day.is_active?' on':''}" id="st${d}" onclick="event.stopPropagation();togDay(${d})"></div>
+      <div class="sched-card-hdr" onclick="togBody(${s})">
+        <div class="sched-day-name" id="sched-hdr-name-${s}">${sched.name}</div>
+        <div class="sched-time" id="sched-hdr-time-${s}">${timeDisplay}</div>
+        <div class="tog${sched.enabled?' on':''}" id="st${s}" onclick="event.stopPropagation();togSched(${s})"></div>
       </div>
-      <div class="sched-body" id="sb${d}">
+      <div class="sched-body" id="sb${s}">
+        <div class="form-group" style="margin-bottom:10px">
+          <label style="font-size:0.8rem;color:#90caf9;margin-bottom:4px;display:block">Name</label>
+          <input type="text" class="tz-inp" style="width:100%" maxlength="31" id="sched-name-${s}"
+            value="${sched.name}" onchange="onSchedNameChange(${s})">
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-bottom:10px">${dayChecks}</div>
         <div class="time-row">
           <label>Start</label>
-          <input class="t-inp" type="number" min="1" max="12" value="${h12inp}" id="h_${d}">
+          <input class="t-inp" type="number" min="1" max="12" value="${h12inp}" id="h_${s}">
           <span class="sep">:</span>
-          <input class="t-inp" type="number" min="0" max="59" value="${day.minute}" id="m_${d}">
-          <select class="t-inp ampm-sel" id="ap_${d}">
+          <input class="t-inp" type="number" min="0" max="59" value="${sched.minute}" id="m_${s}">
+          <select class="t-inp ampm-sel" id="ap_${s}">
             <option${ampmInp==='AM'?' selected':''}>AM</option>
             <option${ampmInp==='PM'?' selected':''}>PM</option>
           </select>
         </div>
         <div class="zones-lbl">Zone Durations (minutes)</div>
         ${zoneRows}
-        <button class="run-day-btn" onclick="runDayNow(${d})">▶ Run ${DAYS[d]} Now</button>
+        <button class="run-day-btn" onclick="runScheduleNow(${s})">▶ Run Now</button>
       </div>`;
     list.appendChild(card);
   });
 }
 
-function togBody(d) { document.getElementById('sb'+d).classList.toggle('open'); }
-function togDay(d) {
+function togBody(s) { document.getElementById('sb'+s).classList.toggle('open'); }
+function togSched(s) {
   if (!schedData) return;
-  schedData[d].is_active = !schedData[d].is_active;
-  const t = document.getElementById('st'+d), c = document.getElementById('sc'+d);
-  schedData[d].is_active ? (t.classList.add('on'), c.classList.add('on'))
-                         : (t.classList.remove('on'), c.classList.remove('on'));
+  schedData[s].enabled = !schedData[s].enabled;
+  const t = document.getElementById('st'+s), c = document.getElementById('sc'+s);
+  schedData[s].enabled ? (t.classList.add('on'), c.classList.add('on'))
+                       : (t.classList.remove('on'), c.classList.remove('on'));
 }
+function togSchedDay(s, d) {
+  if (!schedData) return;
+  const cb = document.getElementById(`sd_${s}_${d}`);
+  if (cb) schedData[s].days[d] = cb.checked;
+}
+function onSchedNameChange(s) {
+  if (!schedData) return;
+  const inp = document.getElementById(`sched-name-${s}`);
+  if (inp) {
+    schedData[s].name = inp.value;
+    const hdr = document.getElementById(`sched-hdr-name-${s}`);
+    if (hdr) hdr.textContent = inp.value;
+    updateManualSchedSelect();
+  }
+}
+function updateManualSchedSelect() {
+  const sel = document.getElementById('manualSched');
+  if (!sel || !schedData) return;
+  sel.innerHTML = schedData.map((sc, i) => `<option value="${i}">${sc.name}</option>`).join('');
+}
+
 function renderSchedTog() {
   const el = document.getElementById('schedTog');
   const sub = document.getElementById('sched-master-sub');
@@ -893,38 +947,35 @@ async function toggleSched() {
 }
 async function saveSchedule() {
   if (!schedData) return;
-  const data = schedData.map((_,d) => {
-    const hInp  = document.getElementById(`h_${d}`);
-    const mInp  = document.getElementById(`m_${d}`);
-    const apSel = document.getElementById(`ap_${d}`);
-    const h12   = hInp  ? parseInt(hInp.value)  : (schedData[d].hour % 12 || 12);
-    const mVal  = mInp  ? parseInt(mInp.value)   : schedData[d].minute;
-    const ampm  = apSel ? apSel.value            : (schedData[d].hour >= 12 ? 'PM' : 'AM');
-    const t24   = to24(isNaN(h12) ? (schedData[d].hour%12||12) : h12,
-                       isNaN(mVal) ? schedData[d].minute : mVal, ampm);
+  const schedules = schedData.map((sc, s) => {
+    const hInp  = document.getElementById(`h_${s}`);
+    const mInp  = document.getElementById(`m_${s}`);
+    const apSel = document.getElementById(`ap_${s}`);
+    const h12   = hInp  ? parseInt(hInp.value)  : (sc.hour % 12 || 12);
+    const mVal  = mInp  ? parseInt(mInp.value)   : sc.minute;
+    const ampm  = apSel ? apSel.value            : (sc.hour >= 12 ? 'PM' : 'AM');
+    const t24   = to24(isNaN(h12) ? (sc.hour%12||12) : h12, isNaN(mVal) ? sc.minute : mVal, ampm);
     return {
-      is_active : schedData[d].is_active,
-      hour      : t24.hour,
-      minute    : t24.minute,
-      durations : Array.from({length:ZONES}, (_,z) => {
-        const el = document.getElementById(`dur_${d}_${z}`);
-        const v = el ? parseInt(el.value) : schedData[d].durations[z];
+      name     : sc.name,
+      enabled  : sc.enabled,
+      days     : sc.days.slice(),
+      hour     : t24.hour,
+      minute   : t24.minute,
+      durations: Array.from({length:ZONES}, (_,z) => {
+        const el = document.getElementById(`dur_${s}_${z}`);
+        const v = el ? parseInt(el.value) : sc.durations[z];
         return isNaN(v) ? 0 : Math.min(120, Math.max(0, v));
       })
     };
   });
-  const r = await POST('/api/schedule', data);
+  const r = await POST('/api/schedule', {enabled: schedEnabled, schedules});
   if (r.message) {
-    // Update schedData so card headers reflect the saved values
-    data.forEach((day, d) => {
-      schedData[d].hour     = day.hour;
-      schedData[d].minute   = day.minute;
-      schedData[d].durations = day.durations.slice();
-    });
-    // Refresh card headers without rebuilding the whole list
-    data.forEach((day, d) => {
-      const timeEl = document.querySelector(`#sc${d} .sched-time`);
-      if (timeEl) timeEl.textContent = fmt12(day.hour, day.minute);
+    schedules.forEach((sc, s) => {
+      schedData[s].hour   = sc.hour;
+      schedData[s].minute = sc.minute;
+      schedData[s].durations = sc.durations.slice();
+      const timeEl = document.getElementById(`sched-hdr-time-${s}`);
+      if (timeEl) timeEl.textContent = fmt12(sc.hour, sc.minute);
     });
     toast('Schedule saved ✓');
   } else {
@@ -944,14 +995,16 @@ async function manualRun() {
   const r = await POST('/api/run_zone', {zone:z, duration:dur});
   r.message ? toast(`${zoneNames[z]} · ${dur}min`) : toast(r.error||'Failed','err');
 }
-async function runDaySeq() {
-  const d = parseInt(document.getElementById('manualDay').value);
-  const r = await POST('/api/run_day', {day:d});
-  r.message ? toast(`Running ${DAYS[d]}`) : toast(r.error||'Failed','err');
+async function runSchedSeq() {
+  const s = parseInt(document.getElementById('manualSched').value);
+  const r = await POST('/api/run_schedule', {schedule:s});
+  const name = (schedData && schedData[s]) ? schedData[s].name : `Schedule ${s+1}`;
+  r.message ? toast(`Running ${name}`) : toast(r.error||'Failed','err');
 }
-async function runDayNow(d) {
-  const r = await POST('/api/run_day', {day:d});
-  r.message ? toast(`Running ${DAYS[d]}`) : toast(r.error||'Failed','err');
+async function runScheduleNow(s) {
+  const r = await POST('/api/run_schedule', {schedule:s});
+  const name = (schedData && schedData[s]) ? schedData[s].name : `Schedule ${s+1}`;
+  r.message ? toast(`Running ${name}`) : toast(r.error||'Failed','err');
 }
 async function stopAll() {
   const r = await POST('/api/stop_sequence');
@@ -1129,6 +1182,23 @@ async function loadWeatherSettings() {
   } catch(e) {}
 }
 
+// ── ET Scaling settings ────────────────────────────────
+async function saveEtSettings() {
+  const r = await POST('/api/config', {
+    et_scaling_enabled: document.getElementById('et-enabled-chk').checked,
+    et_baseline: parseFloat(document.getElementById('et-baseline-inp').value) || 4.0
+  });
+  r.message ? toast('ET settings saved ✓') : toast(r.error || 'Save failed','err');
+}
+
+async function loadEtSettings() {
+  try {
+    const r = await GET('/api/config');
+    document.getElementById('et-enabled-chk').checked = r.et_scaling_enabled || false;
+    document.getElementById('et-baseline-inp').value  = r.et_baseline ?? 4.0;
+  } catch(e) {}
+}
+
 // ── Cycle & Soak settings ──────────────────────────────
 async function saveCycleAndSoak() {
   const r = await POST('/api/config', {
@@ -1168,6 +1238,11 @@ async function updateWeatherWidget() {
     document.getElementById('wx-rain-today').textContent    = w.rain_prob_today + '%';
     document.getElementById('wx-rain-tomorrow').textContent = w.rain_prob_tomorrow + '%';
     document.getElementById('wx-min-temp').textContent      = fmtTemp(w.min_temp_today);
+    const et0Row = document.getElementById('wx-et0-row');
+    if (et0Row && w.et0_today > 0) {
+      document.getElementById('wx-et0-val').textContent = w.et0_today.toFixed(1);
+      et0Row.style.display = '';
+    } else if (et0Row) { et0Row.style.display = 'none'; }
     const ageMin = Math.round(w.fetched_ago_sec / 60);
     document.getElementById('wx-age').textContent           = ageMin < 2 ? 'just updated' : `${ageMin}m ago`;
     const warn = document.getElementById('wx-skip-warn');
