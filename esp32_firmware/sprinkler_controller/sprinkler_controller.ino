@@ -810,7 +810,7 @@ void runSingleZoneTask(void* p) {
   allRelaysOff();
   xSemaphoreTake(statusMutex, portMAX_DELAY);
   runStatus.isRunning     = false;
-  runStatus.dayIndex      = -1;
+  runStatus.scheduleIndex = -1;
   runStatus.activeZone    = -1;
   runStatus.remainingTime = 0;
   runStatus.manualRun     = false;
